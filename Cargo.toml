@@ -1,0 +1,6 @@
+[package]
+name = "latte-compiler"
+version = "0.1.0"
+authors = ["Mrowqa <artur.jamro@gmail.com>"]
+
+[dependencies]
