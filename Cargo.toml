@@ -2,5 +2,11 @@
 name = "latte-compiler"
 version = "0.1.0"
 authors = ["Mrowqa <artur.jamro@gmail.com>"]
+build = "build.rs" # LALRPOP preprocessing
 
 [dependencies]
+lalrpop-util = "0.16.2"
+regex = "0.2.0"
+
+[build-dependencies]
+lalrpop = "0.16.2"

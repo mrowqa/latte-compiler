@@ -1,3 +1,5 @@
+extern crate latte_compiler;
+
 fn main() {
-    println!("Hello, world!");
+    latte_compiler::hello();
 }
