@@ -1,34 +1,39 @@
 #[derive(Debug)]
 pub struct Program {
-    functions: Vec<Function>,
-    classes: Vec<Class>,
+    pub defs: Vec<TopDef>,
+}
+
+#[derive(Debug)]
+pub enum TopDef {
+    FunDef(FunDef),
+    ClassDef(ClassDef),
 }
 
 type Span = (usize, usize);
 pub type Ident = ItemWithSpan<String>;
 
 #[derive(Debug)]
-pub struct Class {
+pub struct ClassDef {
     name: Ident,
     parent_name: Option<Ident>,
     fields: Vec<(Type, Ident)>,
-    methods: Vec<Function>,
+    methods: Vec<FunDef>,
     span: Span,
 }
 
 #[derive(Debug)]
-pub struct Function {
-    ret_type: Type,
-    name: Ident,
-    args: Vec<(Type, Ident)>,
-    body: Stmt,
-    span: Span,
+pub struct FunDef {
+    pub ret_type: Type,
+    pub name: Ident,
+    pub args: Vec<(Type, Ident)>,
+    pub body: Block,
+    pub span: Span,
 }
 
 #[derive(Debug)]
 pub struct Block {
-    stmts: Vec<Stmt>,
-    span: Span,
+    pub stmts: Vec<Box<Stmt>>,
+    pub span: Span,
 }
 
 #[derive(Debug)]
@@ -37,12 +42,15 @@ pub struct ItemWithSpan<T> {
     pub span: Span,
 }
 
-// global function, because it's shorter to write in grammar file
+// global functions, because it's shorter to write in grammar file
 pub fn new_spanned_boxed<T>(l: usize, inner: T, r: usize) -> Box<ItemWithSpan<T>> {
-    Box::new(ItemWithSpan {
+    Box::new(new_spanned(l, inner, r))
+}
+pub fn new_spanned<T>(l: usize, inner: T, r: usize) -> ItemWithSpan<T> {
+    ItemWithSpan {
         inner: inner,
         span: (l, r),
-    })
+    }
 }
 
 pub type Stmt = ItemWithSpan<InnerStmt>;
@@ -50,13 +58,15 @@ pub type Stmt = ItemWithSpan<InnerStmt>;
 pub enum InnerStmt {
     Empty,
     Block(Block),
-    Decl{var_type: Type, var_items: Vec<(Ident, Option<Expr>)>},
-    Assign(Expr, Expr),
-    Ret(Option<Expr>),
-    Cond{cond: Expr, true_branch: Box<Stmt>, false_branch: Option<Box<Stmt>>},
-    While(Expr, Box<Stmt>),
-    ForEach{iter_type: Type, iter_name: Ident, array: Expr},
-    Expr(Expr),
+    Decl{var_type: Type, var_items: Vec<(Ident, Option<Box<Expr>>)>},
+    Assign(Box<Expr>, Box<Expr>),
+    Incr(Ident),
+    Decr(Ident),
+    Ret(Option<Box<Expr>>),
+    Cond{cond: Box<Expr>, true_branch: Block, false_branch: Option<Block>},
+    While(Box<Expr>, Box<Stmt>),
+    ForEach{iter_type: Type, iter_name: Ident, array: Box<Expr>, body: Box<Stmt>},
+    Expr(Box<Expr>),
 }
 
 pub type Type = ItemWithSpan<InnerType>;

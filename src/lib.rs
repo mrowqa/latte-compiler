@@ -12,7 +12,7 @@ pub fn hello() {
 }
 
 // todo clean it
-pub fn parse(code: &str) -> Box<model::ast::Expr> {
+pub fn parse(code: &str) -> model::ast::Program {
     let parser = ProgramParser::new();
     parser.parse(code).unwrap()
 }

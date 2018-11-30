@@ -1,10 +1,13 @@
 use std::str::FromStr;
 use model::ast::*;
 
+// todo add comments
 //grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), ()>>);
 grammar;
 
-pub Program = Expr;
+pub Program: Program = {
+    VecNonEmptySeparated<TopDef, ""> => Program{defs: <>},
+};
 
 VecSeparated<T, Sep>: Vec<T> = {
     <v:(<T> Sep)*> <e:T?> => match e {
@@ -16,6 +19,95 @@ VecSeparated<T, Sep>: Vec<T> = {
         }
     }
 };
+
+VecNonEmptySeparated<T, Sep>: Vec<T> = {
+    <v:(<T> Sep)*> <e:T> => {
+        let mut v = v;
+        v.push(e);
+        v
+    }
+};
+
+TopDef: TopDef = {
+    FunDef => TopDef::FunDef(<>),
+    //ClassDef => TopDef::ClassDef(<>),
+}
+
+FunDef: FunDef = {
+    <t:Type> <id:Ident> "(" <v:FunDefArgs> ")" <b:Block> => {
+        let (l, r) = (t.span.0, b.span.1);
+        FunDef {
+            ret_type: t,
+            name: id,
+            args: v,
+            body: b,
+            span: (l, r),
+        }
+    }
+}
+FunDefArgs = VecSeparated<FunDefSingleArg, ",">;
+FunDefSingleArg = {Type Ident};
+
+Block: Block = {
+    <l:@L> "{" <b:BlockBody> "}" <r:@R> => Block {stmts: b, span: (l, r)},
+}
+BlockBody = VecSeparated<Stmt, "">;
+
+Stmt: Box<Stmt> = {
+    <l:@L> ";" <r:@R> => new_spanned_boxed(l, InnerStmt::Empty, r),
+    <b:Block> => {
+        let (l, r) = b.span;
+        new_spanned_boxed(l, InnerStmt::Block(b), r)
+    },
+    <t:Type> <d:DeclItems> ";" <r:@R> => {
+        let (l, r) = (t.span.0, r);
+        let s = InnerStmt::Decl{var_type: t, var_items: d};
+        new_spanned_boxed(l, s, r)
+    },
+    <e1:Expr> "=" <e2:Expr> => {
+        let (l, r) = (e1.span.0, e2.span.1);
+        let s = InnerStmt::Assign(e1, e2);
+        new_spanned_boxed(l, s, r)
+    },
+    <id:Ident> "++" ";" <r:@R> => {
+        let (l, r) = (id.span.0, r);
+        let s = InnerStmt::Incr(id);
+        new_spanned_boxed(l, s, r)
+    },
+    <id:Ident> "--" ";" <r:@R> => {
+        let (l, r) = (id.span.0, r);
+        let s = InnerStmt::Decr(id);
+        new_spanned_boxed(l, s, r)
+    },
+    <l:@L> "return" <e:Expr?> ";" <r:@R> => {
+        let s = InnerStmt::Ret(e);
+        new_spanned_boxed(l, s, r)
+    },
+    // changed grammar here: if operates on blocks, to reduce conflicts in grammar
+    <l:@L> "if" "(" <c:Expr> ")" <b1:Block> <b2:("else" <Block>)?> <r:@R> => {
+        let s = InnerStmt::Cond{cond: c, true_branch: b1, false_branch: b2};
+        new_spanned_boxed(l, s, r)
+    },
+    <l:@L> "while" "(" <c:Expr> ")" <st:Stmt> => {
+        let (l, r) = (l, st.span.1);
+        let s = InnerStmt::While(c, st);
+        new_spanned_boxed(l, s, r)
+    },
+    <e:Expr> ";" <r:@R> => {
+        let (l, r) = (e.span.0, r);
+        let s = InnerStmt::Expr(e);
+        new_spanned_boxed(l, s, r)
+    }
+}
+DeclSingleItem = { <Ident> <("=" <Expr>)?> }
+DeclItems = VecNonEmptySeparated<DeclSingleItem, ",">;
+
+Type: Type = {
+    <l:@L> "int" <r:@R> => new_spanned(l, InnerType::Int, r),
+    <l:@L> "boolean" <r:@R> => new_spanned(l, InnerType::Bool, r),
+    <l:@L> "string" <r:@R> => new_spanned(l, InnerType::String, r),
+    <l:@L> "void" <r:@R> => new_spanned(l, InnerType::Void, r),
+}
 
 Expr = Expr0;
 
@@ -57,7 +149,7 @@ Expr6: Box<Expr> = {
     @L LitStr @R => new_spanned_boxed(<>),
     <id:Ident> "(" <v:FunCallArgs> ")" <r:@R> => {
         let (l, r) = (id.span.0, r);
-        let e = InnerExpr::FunCall{function_name: *id, args: v};
+        let e = InnerExpr::FunCall{function_name: id, args: v};
         new_spanned_boxed(l, e, r)
     },
     <l:@L> "(" <e:Expr> ")" <r:@R> => new_spanned_boxed(l, e.inner, r),
@@ -107,7 +199,7 @@ AddOp: BinaryOp = {
 
 String: String = {
     r#""([^\\"]|\\[\\"nt])*""# => {
-        let string = &<>[0..<>.len() - 1];
+        let string = &<>[1..<>.len() - 1];
         string.replace(r"\n", "\n").replace(r"\t", "\t")
             .replace(r"\\", r"\").replace(r#"\""#, "\"")
     }
@@ -117,6 +209,6 @@ Num: i32 = {
     r"[0-9]+" => i32::from_str(<>).unwrap()
 };
 
-Ident: Box<Ident> = {
-    <l:@L> <id:r"[a-zA-Z][a-zA-Z0-9_]*"> <r:@R> => new_spanned_boxed(l, id.to_string(), r),
+Ident: Ident = {
+    <l:@L> <id:r"[a-zA-Z][a-zA-Z0-9_]*"> <r:@R> => new_spanned(l, id.to_string(), r),
 };
