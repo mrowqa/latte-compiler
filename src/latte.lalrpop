@@ -1,0 +1,122 @@
+use std::str::FromStr;
+use model::ast::*;
+
+//grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), ()>>);
+grammar;
+
+pub Program = Expr;
+
+VecSeparated<T, Sep>: Vec<T> = {
+    <v:(<T> Sep)*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            let mut v = v;
+            v.push(e);
+            v
+        }
+    }
+};
+
+Expr = Expr0;
+
+LeftTreeBinOpExpr<Tier, NextTier, Op>: Box<Expr> = {
+    <e1:Tier> <op:Op> <e2:NextTier> => {
+        let (l, r) = (e1.span.0, e2.span.1);
+        new_spanned_boxed(l, InnerExpr::BinaryOp(<>), r)
+    },
+    NextTier,
+};
+
+RightTreeBinOpExpr<Tier, NextTier, Op>: Box<Expr> = {
+    <e1:NextTier> <op:Op> <e2:Tier> => {
+        let (l, r) = (e1.span.0, e2.span.1);
+        new_spanned_boxed(l, InnerExpr::BinaryOp(<>), r)
+    },
+    NextTier,
+};
+
+Expr0 = RightTreeBinOpExpr<Expr0, Expr1, LogicOrOp>;
+Expr1 = RightTreeBinOpExpr<Expr1, Expr2, LogicAndOp>;
+Expr2 = LeftTreeBinOpExpr<Expr2, Expr3, RelOp>;
+Expr3 = LeftTreeBinOpExpr<Expr3, Expr4, AddOp>;
+Expr4 = LeftTreeBinOpExpr<Expr4, Expr5, MulOp>;
+
+Expr5: Box<Expr> = {
+    <op:UnaryOp> <e:Expr6> => {
+        let (l, r) = (op.span.0, e.span.1);
+        new_spanned_boxed(l, InnerExpr::UnaryOp(*op, e), r)
+    },
+    Expr6,
+}
+
+Expr6: Box<Expr> = {
+    @L LitInt @R => new_spanned_boxed(<>),
+    @L LitBool @R => new_spanned_boxed(<>),
+    @L LitNull @R => new_spanned_boxed(<>),
+    @L LitVar @R => new_spanned_boxed(<>),
+    @L LitStr @R => new_spanned_boxed(<>),
+    <id:Ident> "(" <v:FunCallArgs> ")" <r:@R> => {
+        let (l, r) = (id.span.0, r);
+        let e = InnerExpr::FunCall{function_name: *id, args: v};
+        new_spanned_boxed(l, e, r)
+    },
+    <l:@L> "(" <e:Expr> ")" <r:@R> => new_spanned_boxed(l, e.inner, r),
+};
+LitInt: InnerExpr = { Num => InnerExpr::LitInt(<>) };
+LitBool: InnerExpr = { 
+    "true" => InnerExpr::LitBool(true),
+    "false" => InnerExpr::LitBool(false),
+};
+LitNull: InnerExpr = { "null" => InnerExpr::LitNull };
+LitVar: InnerExpr = { Ident => InnerExpr::LitVar(<>.inner) };
+LitStr: InnerExpr = { String => InnerExpr::LitStr(<>) };
+FunCallArgs = VecSeparated<Expr, ",">;
+
+UnaryOp: Box<UnaryOp> = {
+    <l:@L> "-" <r:@R> => new_spanned_boxed(l, UnaryOpInner::IntNeg, r),
+    <l:@L> "!" <r:@R> => new_spanned_boxed(l, UnaryOpInner::BoolNeg, r),
+}
+
+LogicOrOp: BinaryOp = {
+    "||" => BinaryOp::Or,
+}
+
+LogicAndOp: BinaryOp = {
+    "&&" => BinaryOp::And,
+}
+
+RelOp: BinaryOp = {
+    "<"  => BinaryOp::LT,
+    "<=" => BinaryOp::LE,
+    ">"  => BinaryOp::GT,
+    ">=" => BinaryOp::GE,
+    "==" => BinaryOp::EQ,
+    "!=" => BinaryOp::NE,
+};
+
+MulOp: BinaryOp = {
+    "*" => BinaryOp::Mul,
+    "/" => BinaryOp::Div,
+    "%" => BinaryOp::Mod,
+};
+
+AddOp: BinaryOp = {
+    "+" => BinaryOp::Add,
+    "-" => BinaryOp::Sub,
+};
+
+String: String = {
+    r#""([^\\"]|\\[\\"nt])*""# => {
+        let string = &<>[0..<>.len() - 1];
+        string.replace(r"\n", "\n").replace(r"\t", "\t")
+            .replace(r"\\", r"\").replace(r#"\""#, "\"")
+    }
+};
+
+Num: i32 = {
+    r"[0-9]+" => i32::from_str(<>).unwrap()
+};
+
+Ident: Box<Ident> = {
+    <l:@L> <id:r"[a-zA-Z][a-zA-Z0-9_]*"> <r:@R> => new_spanned_boxed(l, id.to_string(), r),
+};

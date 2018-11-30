@@ -1,5 +1,7 @@
 extern crate latte_compiler;
 
+
 fn main() {
-    latte_compiler::hello();
+    let x = latte_compiler::parse("1 || 2 && 3");
+    println!("{:?}", x);
 }
