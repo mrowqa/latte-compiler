@@ -10,9 +10,8 @@ pub struct ParseError {
     pub span: Span,
 }
 
-// todo support returning errors
 pub fn parse(code: &str) -> Result<model::ast::Program, Vec<ParseError>> {
-    //let code = _replace_comments(code);
+    let code = replace_comments(code);
     let mut errors = Vec::new();
     let result = ProgramParser::new().parse(&mut errors, &code);
     match result {
@@ -50,46 +49,61 @@ pub fn parse_or_string_error(filename: &str, code: &str) -> Result<model::ast::P
     }
 }
 
-// todo comment remover shouldn't look inside strings...
-fn _replace_comments(code: &str) -> String {
+fn replace_comments(code: &str) -> String {
     let mut result = String::new();
 
     let mut last_ch = '\0';
     let mut erasing = false;
     let mut multiline = false;
+    let mut inside_string = false;
     for ch in code.chars() {
-        if !erasing { // check if comment begins
-            if ch == '#' || last_ch == '/' && ch == '/' {
-                erasing = true;
-                multiline = false;
+        if !erasing {  // check if comment begins
+            match (inside_string, last_ch, ch) {
+                (false, _, '"') => {
+                    inside_string = true;
+                    result.push(ch);
+                },
+                (true, _, '"') if last_ch != '\\' => {
+                    inside_string = false;
+                    result.push(ch);
+                },
+                (true, _, _) => {
+                    result.push(ch);
+                },
+                (false, _, '#') | (false, '/', '/') => {
+                    erasing = true;
+                    multiline = false;
 
-                if last_ch == '/' {
-                    result.pop();
+                    if last_ch == '/' {
+                        result.pop();
+                        result.push(' ');
+                    }
                     result.push(' ');
-                }
-                result.push(' ');
-            }
-            else if last_ch == '/' && ch == '*' {
-                erasing = true;
-                multiline = true;
-                result.pop();
-                result.push_str("  ");
-            }
-            else {
-                result.push(ch);
+                },
+                (false, '/', '*') => {
+                    erasing = true;
+                    multiline = true;
+                    result.pop();
+                    result.push_str("  ");
+                },
+                _ => {
+                    result.push(ch);
+                },
             }
         }
-        else { // check if comments ends
-            if !multiline && ch == '\n' {
-                erasing = false;
-                result.push(ch);
-            }
-            else if multiline && last_ch == '*' && ch == '/' {
-                erasing = false;
-                result.push(' ');
-            }
-            else {
-                result.push(if ch == '\n' {'\n'} else {' '});
+        else {  // check if comments ends
+            match (multiline, last_ch, ch) {
+                (false, _, '\n') => {
+                    erasing = false;
+                    result.push(ch);
+                },
+                (true, '*', '/') => {
+                    erasing = false;
+                    result.push(' ');
+                },
+                _ => {
+                    result.push(if ch == '\n' {'\n'} else {' '});
+                }
             }
         }
 

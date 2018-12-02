@@ -2,8 +2,7 @@ use std::str::FromStr;
 use model::ast::*;
 use parser::ParseError;
 
-// todo add comments
-// (optional) todo tests (pretty printing + check if formatted correctly)
+// (optional) todo tests (reformating code + check if got what expected)
 grammar<'err>(errors: &'err mut Vec<ParseError>);
 
 pub Program: Program = {
