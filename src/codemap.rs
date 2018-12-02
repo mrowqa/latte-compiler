@@ -1,15 +1,18 @@
 use std::fmt::Write;
 use model::ast::Span;
 
+const TAB_INDENTATION: usize = 4;
+
 pub struct CodeMap<'a> {
     filename: &'a str,
-    code: &'a str,
-    lines: Vec<&'a str>,
+    code: String,
+    lines: Vec<String>,  // problem with lifetimes, so we need to have code twice in memory :(
 }
 
 impl<'a> CodeMap<'a> {
     pub fn new(filename: &'a str, code: &'a str) -> Self {
-        let lines: Vec<_> = code.split('\n').collect();
+        let code = code.replace('\t', &" ".repeat(TAB_INDENTATION));
+        let lines = code.split('\n').map(|s| String::from(s)).collect();
         CodeMap {
             filename,
             code,
@@ -17,8 +20,8 @@ impl<'a> CodeMap<'a> {
         }
     }
 
-    pub fn get_code(&self) -> &'a str {
-        self.code
+    pub fn get_code(&self) -> &str {
+        &self.code
     }
 
     pub fn format_message(&self, span: Span, msg: &str) -> String {
