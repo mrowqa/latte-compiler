@@ -1,0 +1,7 @@
+Brudna wersja, o czym warto pamietac!
+
+Zmiany w gramatyce:
+- if operuje na blokach zamiast instrukcji (byl konflikt)
+- nie ma komentarzy - generator parserow nie wspiera, pisalem cos swojego (...)
+
+Jest pretty printing bledow, w tym wielolinijkowych.
