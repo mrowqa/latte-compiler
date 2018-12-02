@@ -75,14 +75,14 @@ Stmt: Box<Stmt> = {
         let s = InnerStmt::Assign(e1, e2);
         new_spanned_boxed(l, s, r)
     },
-    <id:Ident> "++" ";" <r:@R> => {
-        let (l, r) = (id.span.0, r);
-        let s = InnerStmt::Incr(id);
+    <e:Expr> "++" ";" <r:@R> => {
+        let (l, r) = (e.span.0, r);
+        let s = InnerStmt::Incr(e);
         new_spanned_boxed(l, s, r)
     },
-    <id:Ident> "--" ";" <r:@R> => {
-        let (l, r) = (id.span.0, r);
-        let s = InnerStmt::Decr(id);
+    <e:Expr> "--" ";" <r:@R> => {
+        let (l, r) = (e.span.0, r);
+        let s = InnerStmt::Decr(e);
         new_spanned_boxed(l, s, r)
     },
     <l:@L> "return" <e:Expr?> ";" <r:@R> => {
@@ -97,6 +97,16 @@ Stmt: Box<Stmt> = {
     <l:@L> "while" "(" <c:Expr> ")" <st:Stmt> => {
         let (l, r) = (l, st.span.1);
         let s = InnerStmt::While(c, st);
+        new_spanned_boxed(l, s, r)
+    },
+    <l:@L> "for" "(" <t:Type> <id:Ident> ":" <e:Expr> ")" <s:Stmt> => {
+        let (l, r) = (l, s.span.1);
+        let s = InnerStmt::ForEach{
+            iter_type: t,
+            iter_name: id,
+            array: e,
+            body: s,
+        };
         new_spanned_boxed(l, s, r)
     },
     <e:Expr> ";" <r:@R> => {
@@ -120,6 +130,11 @@ Type: Type = {
     <l:@L> "boolean" <r:@R> => new_spanned(l, InnerType::Bool, r),
     <l:@L> "string" <r:@R> => new_spanned(l, InnerType::String, r),
     <l:@L> "void" <r:@R> => new_spanned(l, InnerType::Void, r),
+    <t:Type> "[" "]" <r:@R> => {
+        let (l, r) = (t.span.0, r);
+        let t = InnerType::Array(Box::new(t));
+        new_spanned(l, t, r)
+    },
 }
 
 Expr = Expr0;
@@ -163,6 +178,32 @@ Expr6: Box<Expr> = {
     <id:Ident> "(" <v:FunCallArgs> ")" <r:@R> => {
         let (l, r) = (id.span.0, r);
         let e = InnerExpr::FunCall{function_name: id, args: v};
+        new_spanned_boxed(l, e, r)
+    },
+    <l:@L> "new" <t:Type> "[" <e:Expr> "]" <r:@R> => {
+        let e = InnerExpr::NewArray{
+            elem_type: t,
+            elem_cnt: e,
+        };
+        new_spanned_boxed(l, e, r)
+    },
+    // e1:Expr6, because it can be LitVar, new array,
+    //           or result of function/method call
+    <e1:Expr6> "[" <e2:Expr> "]" <r:@R> => {
+        let (l, r) = (e1.span.0, r);
+        let e = InnerExpr::ArrayElem {
+            array: e1,
+            index: e2,
+        };
+        new_spanned_boxed(l, e, r)
+    },
+    // e1:Expr6, look comment above
+    <e1:Expr6> "." <id:Ident> => {
+        let (l, r) = (e1.span.0, id.span.1);
+        let e = InnerExpr::ObjField {
+            obj: e1,
+            field: id,
+        };
         new_spanned_boxed(l, e, r)
     },
     <l:@L> "(" <e:Expr> ")" <r:@R> => new_spanned_boxed(l, e.inner, r),
