@@ -2,7 +2,7 @@ lalrpop_mod!(latte);
 use self::latte::ProgramParser;
 use model;
 use model::ast::Span;
-use codemap::format_message;
+use codemap::CodeMap;
 
 #[derive(Debug)]
 pub struct ParseError {
@@ -10,8 +10,13 @@ pub struct ParseError {
     pub span: Span,
 }
 
-pub fn parse(code: &str) -> Result<model::ast::Program, Vec<ParseError>> {
-    let code = replace_comments(code);
+pub fn parse(codemap: &CodeMap) -> Result<model::ast::Program, Vec<ParseError>> {
+    let code = replace_comments(codemap.get_code());
+    let code = match code {
+        Ok(without_comments) => without_comments,
+        Err(err) => return Err(vec![err]),
+    };
+
     let mut errors = Vec::new();
     let result = ProgramParser::new().parse(&mut errors, &code);
     match result {
@@ -35,13 +40,13 @@ pub fn parse(code: &str) -> Result<model::ast::Program, Vec<ParseError>> {
     }
 }
 
-pub fn parse_or_string_error(filename: &str, code: &str) -> Result<model::ast::Program, String> {
-    match parse(code) {
+pub fn parse_or_string_error(codemap: &CodeMap) -> Result<model::ast::Program, String> {
+    match parse(codemap) {
         Ok(prog) => Ok(prog),
         Err(errors) => {
             let mut result = String::new();
             for ParseError { err, span } in errors {
-                let msg = format_message(filename, span, code, err);
+                let msg = codemap.format_message(span, err);
                 result.push_str(&msg);
             }
             Err(result)
@@ -49,7 +54,7 @@ pub fn parse_or_string_error(filename: &str, code: &str) -> Result<model::ast::P
     }
 }
 
-fn replace_comments(code: &str) -> String {
+fn replace_comments(code: &str) -> Result<String, ParseError> {
     let mut result = String::new();
 
     let mut last_ch = '\0';
@@ -110,5 +115,13 @@ fn replace_comments(code: &str) -> String {
         last_ch = ch;
     }
 
-    result
+    if erasing && multiline {
+        Err(ParseError{
+            err: "Multiline comment must be closed before EOF",
+            span: (code.len() - 1, code.len()),
+        })
+    }
+    else {
+        Ok(result)
+    }
 }

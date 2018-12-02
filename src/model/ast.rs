@@ -61,7 +61,7 @@ pub enum InnerStmt {
     Block(Block),
     Decl{var_type: Type, var_items: Vec<(Ident, Option<Box<Expr>>)>},
     Assign(Box<Expr>, Box<Expr>),
-    Incr(Ident),
+    Incr(Ident), // todo make Expr
     Decr(Ident),
     Ret(Option<Box<Expr>>),
     Cond{cond: Box<Expr>, true_branch: Block, false_branch: Option<Block>},
