@@ -3,9 +3,9 @@ extern crate latte_compiler;
 
 fn main() {
     // parses incorrectly -- because using empty lexem ""?
-    let x = latte_compiler::parse(r#"
+    let x = latte_compiler::parser::parse(r#"
 int main () {
-    printString("Hello, world!\n");
+    printString("Hel/*lo, worl*/d!\n");
     printString("Hello, world!\n");
 }
 int main2() {}
