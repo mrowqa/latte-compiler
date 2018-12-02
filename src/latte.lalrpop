@@ -2,11 +2,12 @@ use std::str::FromStr;
 use model::ast::*;
 
 // todo add comments
-//grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), ()>>);
+// (optional) todo tests (pretty printing + check if formatted correctly)
+//todo grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), ()>>);
 grammar;
 
 pub Program: Program = {
-    VecNonEmptySeparated<TopDef, ""> => Program{defs: <>},
+    TopDef+ => Program{defs: <>},
 };
 
 VecSeparated<T, Sep>: Vec<T> = {
@@ -49,9 +50,8 @@ FunDefArgs = VecSeparated<FunDefSingleArg, ",">;
 FunDefSingleArg = {Type Ident};
 
 Block: Block = {
-    <l:@L> "{" <b:BlockBody> "}" <r:@R> => Block {stmts: b, span: (l, r)},
+    <l:@L> "{" <b:Stmt*> "}" <r:@R> => Block {stmts: b, span: (l, r)},
 }
-BlockBody = VecSeparated<Stmt, "">;
 
 Stmt: Box<Stmt> = {
     <l:@L> ";" <r:@R> => new_spanned_boxed(l, InnerStmt::Empty, r),
@@ -64,8 +64,8 @@ Stmt: Box<Stmt> = {
         let s = InnerStmt::Decl{var_type: t, var_items: d};
         new_spanned_boxed(l, s, r)
     },
-    <e1:Expr> "=" <e2:Expr> => {
-        let (l, r) = (e1.span.0, e2.span.1);
+    <e1:Expr> "=" <e2:Expr> ";" <r:@R> => {
+        let (l, r) = (e1.span.0, r);
         let s = InnerStmt::Assign(e1, e2);
         new_spanned_boxed(l, s, r)
     },
