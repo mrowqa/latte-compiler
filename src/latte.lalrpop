@@ -1,10 +1,10 @@
 use std::str::FromStr;
 use model::ast::*;
+use parser::ParseError;
 
 // todo add comments
 // (optional) todo tests (pretty printing + check if formatted correctly)
-//todo grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, (usize, &'input str), ()>>);
-grammar;
+grammar<'err>(errors: &'err mut Vec<ParseError>);
 
 pub Program: Program = {
     TopDef+ => Program{defs: <>},
@@ -32,6 +32,13 @@ VecNonEmptySeparated<T, Sep>: Vec<T> = {
 TopDef: TopDef = {
     FunDef => TopDef::FunDef(<>),
     //ClassDef => TopDef::ClassDef(<>),
+    <@L> ! <@R> => {
+        errors.push(ParseError{
+            err: "Invalid syntax (top definition)",
+            span: (<>),
+        });
+        TopDef::Error
+    },
 }
 
 FunDef: FunDef = {
@@ -97,7 +104,14 @@ Stmt: Box<Stmt> = {
         let (l, r) = (e.span.0, r);
         let s = InnerStmt::Expr(e);
         new_spanned_boxed(l, s, r)
-    }
+    },
+    <l:@L> ! <r:@R> => {
+        errors.push(ParseError{
+            err: "Invalid syntax (statement)",
+            span: (<>),
+        });
+        new_spanned_boxed(l, InnerStmt::Error, r)
+    },
 }
 DeclSingleItem = { <Ident> <("=" <Expr>)?> }
 DeclItems = VecNonEmptySeparated<DeclSingleItem, ",">;

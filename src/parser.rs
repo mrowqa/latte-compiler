@@ -1,15 +1,56 @@
 lalrpop_mod!(latte);
 use self::latte::ProgramParser;
 use model;
+use model::ast::Span;
+use codemap::format_message;
 
-// todo support returning errors
-pub fn parse(code: &str) -> model::ast::Program {
-    //let code = _replace_comments(code);
-    let parser = ProgramParser::new();
-    parser.parse(&code).unwrap()
+#[derive(Debug)]
+pub struct ParseError {
+    pub err: &'static str,
+    pub span: Span,
 }
 
-// todo shouldn't look inside strings...
+// todo support returning errors
+pub fn parse(code: &str) -> Result<model::ast::Program, Vec<ParseError>> {
+    //let code = _replace_comments(code);
+    let mut errors = Vec::new();
+    let result = ProgramParser::new().parse(&mut errors, &code);
+    match result {
+        Ok(program) => {
+            if errors.is_empty() { // probably must be empty
+                Ok(program)
+            }
+            else {
+                Err(errors)
+            }
+        },
+        Err(_) => {
+            if errors.is_empty() { // probably mustn't be empty
+                errors.push(ParseError {
+                    err: "Fatal syntax error: can not recognize anything",
+                    span: (0, code.len() - 1),
+                });
+            }
+            Err(errors)
+        }
+    }
+}
+
+pub fn parse_or_string_error(filename: &str, code: &str) -> Result<model::ast::Program, String> {
+    match parse(code) {
+        Ok(prog) => Ok(prog),
+        Err(errors) => {
+            let mut result = String::new();
+            for ParseError { err, span } in errors {
+                let msg = format_message(filename, span, code, err);
+                result.push_str(&msg);
+            }
+            Err(result)
+        }
+    }
+}
+
+// todo comment remover shouldn't look inside strings...
 fn _replace_comments(code: &str) -> String {
     let mut result = String::new();
 

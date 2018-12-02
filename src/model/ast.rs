@@ -7,9 +7,10 @@ pub struct Program {
 pub enum TopDef {
     FunDef(FunDef),
     ClassDef(ClassDef),
+    Error,
 }
 
-type Span = (usize, usize);
+pub type Span = (usize, usize);
 pub type Ident = ItemWithSpan<String>;
 
 #[derive(Debug)]
@@ -67,6 +68,7 @@ pub enum InnerStmt {
     While(Box<Expr>, Box<Stmt>),
     ForEach{iter_type: Type, iter_name: Ident, array: Box<Expr>, body: Box<Stmt>},
     Expr(Box<Expr>),
+    Error,
 }
 
 pub type Type = ItemWithSpan<InnerType>;
