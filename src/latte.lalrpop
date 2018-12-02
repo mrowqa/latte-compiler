@@ -207,7 +207,7 @@ Expr6: Box<Expr> = {
         };
         new_spanned_boxed(l, e, r)
     },
-    // e1:Expr6, look comment above
+    // e1:Expr6, look at comment above
     <e1:Expr6> "." <id:Ident> => {
         let (l, r) = (e1.span.0, id.span.1);
         let e = InnerExpr::ObjField {
