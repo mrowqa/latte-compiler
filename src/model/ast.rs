@@ -64,7 +64,7 @@ pub enum InnerStmt {
     Incr(Box<Expr>),
     Decr(Box<Expr>),
     Ret(Option<Box<Expr>>),
-    Cond{cond: Box<Expr>, true_branch: Block, false_branch: Option<Block>},
+    Cond{cond: Box<Expr>, true_branch: Box<Stmt>, false_branch: Option<Box<Stmt>>},
     While(Box<Expr>, Box<Stmt>),
     ForEach{iter_type: Type, iter_name: Ident, array: Box<Expr>, body: Box<Stmt>},
     Expr(Box<Expr>),

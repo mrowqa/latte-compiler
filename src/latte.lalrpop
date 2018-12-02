@@ -59,7 +59,11 @@ Block: Block = {
     <l:@L> "{" <b:Stmt*> "}" <r:@R> => Block {stmts: b, span: (l, r)},
 }
 
-Stmt: Box<Stmt> = {
+// "hack" for dangling ifs:
+// https://github.com/lalrpop/lalrpop/issues/67#issuecomment-188951041
+Stmt = StmtRestr<"I">; // include ifs by default
+
+StmtRestr<I>: Box<Stmt> = {
     <l:@L> ";" <r:@R> => new_spanned_boxed(l, InnerStmt::Empty, r),
     <b:Block> => {
         let (l, r) = b.span;
@@ -89,17 +93,23 @@ Stmt: Box<Stmt> = {
         let s = InnerStmt::Ret(e);
         new_spanned_boxed(l, s, r)
     },
-    // changed grammar here: if operates on blocks, to reduce conflicts in grammar
-    <l:@L> "if" "(" <c:Expr> ")" <b1:Block> <b2:("else" <Block>)?> <r:@R> => {
-        let s = InnerStmt::Cond{cond: c, true_branch: b1, false_branch: b2};
+    // dangling if solution explained above
+    <l:@L> "if" "(" <c:Expr> ")" <s1:StmtRestr<"I">> if I != "" => {
+        let (l, r) = (l, s1.span.1);
+        let s = InnerStmt::Cond{cond: c, true_branch: s1, false_branch: None};
         new_spanned_boxed(l, s, r)
     },
-    <l:@L> "while" "(" <c:Expr> ")" <st:Stmt> => {
+    <l:@L> "if" "(" <c:Expr> ")" <s1:StmtRestr<"">> "else" <s2:StmtRestr<I>> => {
+        let (l, r) = (l, s2.span.1);
+        let s = InnerStmt::Cond{cond: c, true_branch: s1, false_branch: Some(s2)};
+        new_spanned_boxed(l, s, r)
+    },
+    <l:@L> "while" "(" <c:Expr> ")" <st:StmtRestr<I>> => {
         let (l, r) = (l, st.span.1);
         let s = InnerStmt::While(c, st);
         new_spanned_boxed(l, s, r)
     },
-    <l:@L> "for" "(" <t:Type> <id:Ident> ":" <e:Expr> ")" <s:Stmt> => {
+    <l:@L> "for" "(" <t:Type> <id:Ident> ":" <e:Expr> ")" <s:StmtRestr<I>> => {
         let (l, r) = (l, s.span.1);
         let s = InnerStmt::ForEach{
             iter_type: t,
