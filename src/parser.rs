@@ -10,6 +10,11 @@ pub struct ParseError {
     pub span: Span,
 }
 
+const KEYWORDS: &'static [&'static str] = &[
+    "if", "else", "return", "while", "for", "new", "class", "extends",
+    "true", "false", "null", "int", "string", "boolean", "void",
+];
+
 pub fn parse(codemap: &CodeMap) -> Result<model::ast::Program, Vec<ParseError>> {
     let code = replace_comments(codemap.get_code());
     let code = match code {

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use model::ast::*;
-use parser::ParseError;
+use parser::{ParseError, KEYWORDS};
 
 // (optional) todo tests (reformating code + check if got what expected)
 grammar<'err>(errors: &'err mut Vec<ParseError>);
@@ -319,6 +319,14 @@ Num: i32 = {
     r"[0-9]+" => i32::from_str(<>).unwrap()
 };
 
-Ident: Ident = { // todo check if identifier is not a keyword
-    <l:@L> <id:r"[a-zA-Z][a-zA-Z0-9_]*"> <r:@R> => new_spanned(l, id.to_string(), r),
+Ident: Ident = {
+    <l:@L> <id:r"[a-zA-Z][a-zA-Z0-9_]*"> <r:@R> => {
+        if KEYWORDS.contains(&id) {  // probably lalrpop parses keywords as token, anyway
+            errors.push(ParseError {
+                err: "Syntax error: keyword can not be used as an identifier",
+                span: (l, r),
+            });
+        };
+        new_spanned(l, id.to_string(), r)
+    },
 };
