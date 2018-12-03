@@ -1,7 +1,10 @@
 use std::fmt::Write;
+use std::cmp::max;
 use model::ast::Span;
+use colored::*;
 
 const TAB_INDENTATION: usize = 4;
+const ERROR_CONTEXT_LINES_MARGIN: usize = 2;
 
 pub struct CodeMap<'a> {
     filename: &'a str,
@@ -24,13 +27,14 @@ impl<'a> CodeMap<'a> {
         &self.code
     }
 
-    // todo single line? print neighbours; multiline? also.
     pub fn format_message(&self, span: Span, msg: &str) -> String {
         assert!(span.0 <= span.1);
         let mut result = String::new();
 
         let beg_row_col = self.find_row_col(span.0);
         let end_row_col = self.find_row_col(span.1);
+
+        let err_fmt = |s: &str| s.red().bold();
 
         match beg_row_col {
             Some((row, col)) => {
@@ -42,20 +46,35 @@ impl<'a> CodeMap<'a> {
         };
 
         if let (Some((row0, col0)), Some((row1, col1))) = (beg_row_col, end_row_col) {
+            let indent = if row0 == row1 {""} else {"  "};
+            for i in max(0, row0 - ERROR_CONTEXT_LINES_MARGIN)..row0 {
+                write!(&mut result, "{}{}\n", indent, self.lines[i]);
+            }
+
             if row0 == row1 {
                 write!(&mut result, "{}\n", self.lines[row0]);
-                write!(&mut result, "{}{}\n", " ".repeat(col0), "^".repeat(col1 - col0));
+                write!(&mut result, "{}{}\n",
+                    " ".repeat(col0), err_fmt(&"^".repeat(col1 - col0)));
             }
             else {
-                write!(&mut result, "/-{}v\n", "-".repeat(col0));
+                write!(&mut result, "{}{}{}\n",
+                    err_fmt("/-"), err_fmt(&"-".repeat(col0)), err_fmt("v"));
                 for i in row0..=row1 {
-                    write!(&mut result, "| {}\n", self.lines[i]);
+                    write!(&mut result, "{} {}\n", err_fmt("|"), self.lines[i]);
                 }
-                write!(&mut result, "\\-{}^\n", "-".repeat(col1));
+                write!(&mut result, "{}{}{}\n",
+                    err_fmt("\\-"), err_fmt(&"-".repeat(col1)), err_fmt("^"));
+            }
+
+            for i in (row1 + 1)..(row1 + 1 + ERROR_CONTEXT_LINES_MARGIN) {
+                if i >= self.lines.len() {
+                    break;
+                }
+                write!(&mut result, "{}{}\n", indent, self.lines[i]);
             }
         }
 
-        write!(&mut result, "{}\n\n", msg);
+        write!(&mut result, "{}\n\n", err_fmt(msg));
 
         result
     }

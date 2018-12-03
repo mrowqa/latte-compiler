@@ -8,7 +8,8 @@ fn main() {
     let res = parse_or_string_error(&CodeMap::new("input", r#"
 int main () {
   Counter c;
-  c = new Counter;
+  if
+  c = new Counter; ff
   c.incr();
   c.incr();
   c.incr();
