@@ -41,10 +41,10 @@ TopDef: TopDef = {
 }
 
 ClassDef: ClassDef = {
-    <l:@L> "class" <id:Ident> "{" <v:ClassItemDef*> "}" <r:@R> => {
+    <l:@L> "class" <id1:Ident> <id2:("extends" <Ident>)?> "{" <v:ClassItemDef*> "}" <r:@R> => {
         ClassDef {
-            name: id,
-            parent_name: None,
+            name: id1,
+            parent_name: id2,
             items: v,
             span: (l, r),
         }
@@ -56,7 +56,11 @@ ClassItemDef: ClassItemDef = {
         let d = InnerClassItemDef::Field(t, id);
         new_spanned(l, d, r)
     },
-    // method
+    <f:FunDef> => {
+        let (l, r) = f.span;
+        let d = InnerClassItemDef::Method(f);
+        new_spanned(l, d, r)
+    },
     <l:@L> ! <r:@R> => {
         errors.push(ParseError {
             err: "Syntax error: invalid class item definition",
@@ -253,6 +257,11 @@ Expr6: Box<Expr> = {
             obj: e1,
             field: id,
         };
+        new_spanned_boxed(l, e, r)
+    },
+    <e:Expr6> "." <id:Ident> "(" <v:FunCallArgs> ")" <r:@R> => {
+        let (l, r) = (id.span.0, r);
+        let e = InnerExpr::ObjMethodCall{obj: e, method_name: id, args: v};
         new_spanned_boxed(l, e, r)
     },
     <l:@L> "(" <e:Expr> ")" <r:@R> => new_spanned_boxed(l, e.inner, r),

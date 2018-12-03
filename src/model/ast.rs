@@ -104,7 +104,7 @@ pub enum InnerExpr {
     ArrayElem{array: Box<Expr>, index: Box<Expr>},
     NewObject(Type),
     ObjField{obj: Box<Expr>, field: Ident},
-    ObjMethodCall{obj: Box<Expr>, method_name: Ident, args: Vec<Expr>},
+    ObjMethodCall{obj: Box<Expr>, method_name: Ident, args: Vec<Box<Expr>>},
 }
 
 pub type UnaryOp = ItemWithSpan<UnaryOpInner>;
