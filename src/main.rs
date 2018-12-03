@@ -7,7 +7,7 @@ use latte_compiler::codemap::CodeMap;
 fn main() {
     let res = parse_or_string_error(&CodeMap::new("input", r#"
 int main () {
-  class Counter c;
+  Counter c;
   c = new Counter;
   c.incr();
   c.incr();
@@ -15,6 +15,7 @@ int main () {
   int x = c.value();
   printInt(x);
   return 0;
+  5.[haha]; // test :D
 }
 
 class Counter {
@@ -61,9 +62,9 @@ class Point4 extends Point3 {
 }
 
 int main () {
-  class Point2 p = new Point3;
-  class Point3 q = new Point3;
-  class Point4 r = new Point4;
+  Point2 p = new Point3;
+  Point3 q = new Point3;
+  Point4 r = new Point4;
 
   q.move(2,4);
   q.moveZ(7);
@@ -85,23 +86,23 @@ int main () {
 // --------------------------------------------
 
 class Node {
-  class Shape elem;
-  class Node next;
+  Shape elem;
+  Node next;
 
-  void setElem(class Shape c) { elem = c; }
+  void setElem(Shape c) { elem = c; }
 
-  void setNext(class Node n) { next = n; }
+  void setNext(Node n) { next = n; }
 
-  class Shape getElem() { return elem; }
+  Shape getElem() { return elem; }
 
-  class Node getNext() { return next; }
+  Node getNext() { return next; }
 }
 
 class Stack {
-  class Node head;
+  Node head;
 
-  void push(class Shape c) {
-    class Node newHead = new Node;
+  void push(Shape c) {
+    Node newHead = new Node;
     newHead.setElem(c);
     newHead.setNext(head);
     head = newHead;
@@ -111,7 +112,7 @@ class Stack {
     return head==null;
   }
 
-  class Shape top() {
+  Shape top() {
     return head.getElem();
   }
 
@@ -149,8 +150,8 @@ class Square extends Rectangle {
 }
 
 int main() {
-  class Stack stk = new Stack;
-  class Shape s = new Shape;
+  Stack stk = new Stack;
+  Shape s = new Shape;
   stk.push(s);
   s = new Rectangle;
   stk.push(s);

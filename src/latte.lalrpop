@@ -175,9 +175,8 @@ Type: Type = {
         let t = InnerType::Array(Box::new(t));
         new_spanned(l, t, r)
     },
-    // todo try to remove this "class" literal
-    <l:@L> "class" <id:Ident> => {
-        let (l, r) = (l, id.span.1);
+    <id:Ident> => {
+        let (l, r) = id.span;
         let t = InnerType::Class(id.inner);
         new_spanned(l, t, r)
     },
@@ -235,7 +234,8 @@ Expr6: Box<Expr> = {
     },
     // e1:Expr6, because it can be LitVar, new array,
     //           or result of function/method call
-    <e1:Expr6> "[" <e2:Expr> "]" <r:@R> => {
+    // added ".", otherwise there are conflicts in grammar (decribed in README)
+    <e1:Expr6> "." "[" <e2:Expr> "]" <r:@R> => {
         let (l, r) = (e1.span.0, r);
         let e = InnerExpr::ArrayElem {
             array: e1,
@@ -243,10 +243,8 @@ Expr6: Box<Expr> = {
         };
         new_spanned_boxed(l, e, r)
     },
-    // todo make grammar consistent (type: "class" Ident)
-    <l:@L> "new" <id:Ident> => {
-        let (l, r) = (l, id.span.1);
-        let t = new_spanned(id.span.0, InnerType::Class(id.inner), id.span.1);
+    <l:@L> "new" <t:Type> => {
+        let (l, r) = (l, t.span.1);
         let e = InnerExpr::NewObject(t);
         new_spanned_boxed(l, e, r)
     },
