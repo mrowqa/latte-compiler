@@ -30,14 +30,40 @@ VecNonEmptySeparated<T, Sep>: Vec<T> = {
 
 TopDef: TopDef = {
     FunDef => TopDef::FunDef(<>),
-    //ClassDef => TopDef::ClassDef(<>),
+    ClassDef => TopDef::ClassDef(<>),
     <@L> ! <@R> => {
-        errors.push(ParseError{
-            err: "Invalid syntax (top definition)",
+        errors.push(ParseError {
+            err: "Syntax error: invalid top definition",
             span: (<>),
         });
         TopDef::Error
     },
+}
+
+ClassDef: ClassDef = {
+    <l:@L> "class" <id:Ident> "{" <v:ClassItemDef*> "}" <r:@R> => {
+        ClassDef {
+            name: id,
+            parent_name: None,
+            items: v,
+            span: (l, r),
+        }
+    }
+}
+ClassItemDef: ClassItemDef = {
+    <t:Type> <id:Ident> ";" <r:@R> => {
+        let (l, r) = (t.span.0, r);
+        let d = InnerClassItemDef::Field(t, id);
+        new_spanned(l, d, r)
+    },
+    // method
+    <l:@L> ! <r:@R> => {
+        errors.push(ParseError {
+            err: "Syntax error: invalid class item definition",
+            span: (<>),
+        });
+        new_spanned(l, InnerClassItemDef::Error, r)
+    }
 }
 
 FunDef: FunDef = {
@@ -125,8 +151,8 @@ StmtRestr<I>: Box<Stmt> = {
         new_spanned_boxed(l, s, r)
     },
     <l:@L> ! <r:@R> => {
-        errors.push(ParseError{
-            err: "Invalid syntax (statement)",
+        errors.push(ParseError {
+            err: "Syntax error: invalid statement",
             span: (<>),
         });
         new_spanned_boxed(l, InnerStmt::Error, r)
@@ -143,6 +169,12 @@ Type: Type = {
     <t:Type> "[" "]" <r:@R> => {
         let (l, r) = (t.span.0, r);
         let t = InnerType::Array(Box::new(t));
+        new_spanned(l, t, r)
+    },
+    // todo try to remove this "class" literal
+    <l:@L> "class" <id:Ident> => {
+        let (l, r) = (l, id.span.1);
+        let t = InnerType::Class(id.inner);
         new_spanned(l, t, r)
     },
 }
@@ -205,6 +237,13 @@ Expr6: Box<Expr> = {
             array: e1,
             index: e2,
         };
+        new_spanned_boxed(l, e, r)
+    },
+    // todo make grammar consistent (type: "class" Ident)
+    <l:@L> "new" <id:Ident> => {
+        let (l, r) = (l, id.span.1);
+        let t = new_spanned(id.span.0, InnerType::Class(id.inner), id.span.1);
+        let e = InnerExpr::NewObject(t);
         new_spanned_boxed(l, e, r)
     },
     // e1:Expr6, look at comment above
@@ -273,6 +312,6 @@ Num: i32 = {
     r"[0-9]+" => i32::from_str(<>).unwrap()
 };
 
-Ident: Ident = {
+Ident: Ident = { // todo check if identifier is not a keyword
     <l:@L> <id:r"[a-zA-Z][a-zA-Z0-9_]*"> <r:@R> => new_spanned(l, id.to_string(), r),
 };

@@ -15,11 +15,18 @@ pub type Ident = ItemWithSpan<String>;
 
 #[derive(Debug)]
 pub struct ClassDef {
-    name: Ident,
-    parent_name: Option<Ident>,
-    fields: Vec<(Type, Ident)>,
-    methods: Vec<FunDef>,
-    span: Span,
+    pub name: Ident,
+    pub parent_name: Option<Ident>,
+    pub items: Vec<ClassItemDef>,
+    pub span: Span,
+}
+
+pub type ClassItemDef = ItemWithSpan<InnerClassItemDef>;
+#[derive(Debug)]
+pub enum InnerClassItemDef {
+    Field(Type, Ident),
+    Method(FunDef),
+    Error,
 }
 
 #[derive(Debug)]
