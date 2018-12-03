@@ -24,6 +24,7 @@ impl<'a> CodeMap<'a> {
         &self.code
     }
 
+    // todo single line? print neighbours; multiline? also.
     pub fn format_message(&self, span: Span, msg: &str) -> String {
         assert!(span.0 <= span.1);
         let mut result = String::new();
