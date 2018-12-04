@@ -15,7 +15,7 @@ pub struct CodeMap<'a> {
 impl<'a> CodeMap<'a> {
     pub fn new(filename: &'a str, code: &'a str) -> Self {
         let code = code.replace('\t', &" ".repeat(TAB_INDENTATION));
-        let lines = code.split('\n').map(|s| String::from(s)).collect();
+        let lines = code.split('\n').map(String::from).collect();
         CodeMap {
             filename,
             code,
