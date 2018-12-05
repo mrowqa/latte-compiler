@@ -63,7 +63,7 @@ impl<'a> CodeMap<'a> {
                     write!(&mut result, "{} {}\n", err_fmt("|"), self.lines[i]);
                 }
                 write!(&mut result, "{}{}{}\n",
-                    err_fmt("\\-"), err_fmt(&"-".repeat(col1)), err_fmt("^"));
+                    err_fmt("\\-"), err_fmt(&"-".repeat(col1 - 1)), err_fmt("^"));
             }
 
             for i in (row1 + 1)..(row1 + 1 + ERROR_CONTEXT_LINES_MARGIN) {
