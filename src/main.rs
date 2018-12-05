@@ -14,7 +14,9 @@ int main() {
   1 - 2;
   1 * 2;
   1 / 2;
-  1 / 0;
+  syntax error )
+  1 / (3 *
+     4 % 2) + 42;
   1 % 2;
   1 < 2;
   1 <= 2;
@@ -26,6 +28,11 @@ int main() {
   true != false;
   "xD" == "haha";
   "xD" != "haha";
+  -42;
+  - -42;
+  !true;
+  !!true;
+  !!!true;
 }
 
 "#));

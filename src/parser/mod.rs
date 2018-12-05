@@ -1,7 +1,8 @@
 lalrpop_mod!(latte, "/parser/latte.rs");
 use self::latte::ProgramParser;
 use model;
-use model::ast::{Span, InnerExpr, BinaryOp, UnaryOpInner};
+use model::ast::{Span, Expr, InnerExpr, BinaryOp, UnaryOpInner,
+                 new_spanned_boxed};
 use codemap::CodeMap;
 
 #[derive(Debug)]
@@ -131,8 +132,10 @@ fn replace_comments(code: &str) -> Result<String, ParseError> {
     }
 }
 
-fn optimize_const_expr_shallow(expr: InnerExpr) -> InnerExpr {
-    // (optional) todo detect if division by zero and return an error
+// ---------------------------- ----------------------
+// --------------- parser utils ----------------------
+// ---------------------------------------------------
+fn optimize_const_expr_shallow(expr: InnerExpr) -> Result<InnerExpr, &'static str> {
     use self::InnerExpr::*;
     use self::BinaryOp::*;
     use self::UnaryOpInner::*;
@@ -145,7 +148,10 @@ fn optimize_const_expr_shallow(expr: InnerExpr) -> InnerExpr {
                 (LitInt(l), Add, LitInt(r)) => LitInt(l + r),
                 (LitInt(l), Sub, LitInt(r)) => LitInt(l - r),
                 (LitInt(l), Mul, LitInt(r)) => LitInt(l * r),
-                (LitInt(l), Div, LitInt(r)) if *r != 0 => LitInt(l / r),
+                (LitInt(l), Div, LitInt(r)) => {
+                    if *r == 0 { return Err("Assertion Error: Division by zero in constant expression"); }
+                    LitInt(l / r)
+                },
                 (LitInt(l), Mod, LitInt(r)) => LitInt(l % r),
                 (LitInt(l), LT, LitInt(r)) => LitBool(l < r),
                 (LitInt(l), LE, LitInt(r)) => LitBool(l <= r),
@@ -169,5 +175,19 @@ fn optimize_const_expr_shallow(expr: InnerExpr) -> InnerExpr {
         },
         _ => LitNull,
     };
-    if let LitNull = e { expr } else { e }
+    Ok(if let LitNull = e { expr } else { e })
+}
+
+fn return_or_fail(l: usize, result: Result<InnerExpr, &'static str>, r: usize,
+        errors: &mut Vec<ParseError>) -> Box<Expr> {
+    match result {
+        Ok(e) => new_spanned_boxed(l, e, r),
+        Err(err) => {
+            errors.push(ParseError {
+                err,
+                span: (l, r),
+            });
+            new_spanned_boxed(l, InnerExpr::LitNull, r)
+        }
+    }
 }

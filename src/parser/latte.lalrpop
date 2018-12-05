@@ -1,6 +1,7 @@
 use std::str::FromStr;
 use model::ast::*;
-use super::{ParseError, KEYWORDS, optimize_const_expr_shallow};
+use super::{ParseError, KEYWORDS, optimize_const_expr_shallow,
+    return_or_fail};
 
 // (optional) todo tests (reformating code + check if got what expected)
 grammar<'err>(errors: &'err mut Vec<ParseError>);
@@ -188,7 +189,7 @@ LeftTreeBinOpExpr<Tier, NextTier, Op>: Box<Expr> = {
     <e1:Tier> <op:Op> <e2:NextTier> => {
         let (l, r) = (e1.span.0, e2.span.1);
         let e = optimize_const_expr_shallow(InnerExpr::BinaryOp(<>));
-        new_spanned_boxed(l, e, r)
+        return_or_fail(l, e, r, errors)
     },
     NextTier,
 };
@@ -197,7 +198,7 @@ RightTreeBinOpExpr<Tier, NextTier, Op>: Box<Expr> = {
     <e1:NextTier> <op:Op> <e2:Tier> => {
         let (l, r) = (e1.span.0, e2.span.1);
         let e = optimize_const_expr_shallow(InnerExpr::BinaryOp(<>));
-        new_spanned_boxed(l, e, r)
+        return_or_fail(l, e, r, errors)
     },
     NextTier,
 };
@@ -209,10 +210,10 @@ Expr3 = LeftTreeBinOpExpr<Expr3, Expr4, AddOp>;
 Expr4 = LeftTreeBinOpExpr<Expr4, Expr5, MulOp>;
 
 Expr5: Box<Expr> = {
-    <op:UnaryOp> <e:Expr6> => {
+    <op:UnaryOp> <e:Expr5> => {
         let (l, r) = (op.span.0, e.span.1);
         let e = optimize_const_expr_shallow(InnerExpr::UnaryOp(*op, e));
-        new_spanned_boxed(l, e, r)
+        return_or_fail(l, e, r, errors)
     },
     Expr6,
 }
