@@ -1,7 +1,7 @@
-lalrpop_mod!(latte);
+lalrpop_mod!(latte, "/parser/latte.rs");
 use self::latte::ProgramParser;
 use model;
-use model::ast::Span;
+use model::ast::{Span, InnerExpr, BinaryOp, UnaryOpInner};
 use codemap::CodeMap;
 
 #[derive(Debug)]
@@ -129,4 +129,45 @@ fn replace_comments(code: &str) -> Result<String, ParseError> {
     else {
         Ok(result)
     }
+}
+
+fn optimize_const_expr_shallow(expr: InnerExpr) -> InnerExpr {
+    // (optional) todo detect if division by zero and return an error
+    use self::InnerExpr::*;
+    use self::BinaryOp::*;
+    use self::UnaryOpInner::*;
+    let e = match expr {
+        BinaryOp(ref lhs, ref op, ref rhs) => {
+            match (&lhs.inner, op, &rhs.inner) {
+                (LitBool(l), And, LitBool(r)) => LitBool(*l && *r),
+                (LitBool(l), Or, LitBool(r)) => LitBool(*l || *r),
+                (LitStr(l), Add, LitStr(r)) => LitStr(l.to_string() + r),
+                (LitInt(l), Add, LitInt(r)) => LitInt(l + r),
+                (LitInt(l), Sub, LitInt(r)) => LitInt(l - r),
+                (LitInt(l), Mul, LitInt(r)) => LitInt(l * r),
+                (LitInt(l), Div, LitInt(r)) if *r != 0 => LitInt(l / r),
+                (LitInt(l), Mod, LitInt(r)) => LitInt(l % r),
+                (LitInt(l), LT, LitInt(r)) => LitBool(l < r),
+                (LitInt(l), LE, LitInt(r)) => LitBool(l <= r),
+                (LitInt(l), GT, LitInt(r)) => LitBool(l > r),
+                (LitInt(l), GE, LitInt(r)) => LitBool(l >= r),
+                (LitInt(l), EQ, LitInt(r)) => LitBool(l == r),
+                (LitInt(l), NE, LitInt(r)) => LitBool(l != r),
+                (LitBool(l), EQ, LitBool(r)) => LitBool(l == r),
+                (LitBool(l), NE, LitBool(r)) => LitBool(l != r),
+                (LitStr(l), EQ, LitStr(r)) => LitBool(l == r),
+                (LitStr(l), NE, LitStr(r)) => LitBool(l != r),
+                _ => LitNull,
+            }
+        },
+        UnaryOp(ref op, ref subexpr) => {
+            match (&op.inner, &subexpr.inner) {
+                (IntNeg, LitInt(l)) => LitInt(-l),
+                (BoolNeg, LitBool(l)) => LitBool(!l),
+                _ => LitNull,
+            }
+        },
+        _ => LitNull,
+    };
+    if let LitNull = e { expr } else { e }
 }
