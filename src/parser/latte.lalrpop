@@ -235,6 +235,7 @@ Expr6: Box<Expr> = {
     // e1:Expr6, because it can be LitVar, new array,
     //           or result of function/method call
     // added ".", otherwise there are conflicts in grammar (decribed in README)
+    // TODO (optional) make it LR1 without "."
     <e1:Expr6> "." "[" <e2:Expr> "]" <r:@R> => {
         let (l, r) = (e1.span.0, r);
         let e = InnerExpr::ArrayElem {
