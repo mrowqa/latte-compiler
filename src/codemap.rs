@@ -38,43 +38,43 @@ impl<'a> CodeMap<'a> {
 
         match beg_row_col {
             Some((row, col)) => {
-                write!(&mut result, "{}:{}:{}:\n", self.filename, row, col);
+                write!(&mut result, "{}:{}:{}:\n", self.filename, row, col).unwrap();
             },
             None => {
-                write!(&mut result, "{}:{}:\n", self.filename, span.0);
+                write!(&mut result, "{}:{}:\n", self.filename, span.0).unwrap();
             },
         };
 
         if let (Some((row0, col0)), Some((row1, col1))) = (beg_row_col, end_row_col) {
             let indent = if row0 == row1 {""} else {"  "};
             for i in max(0, row0 - ERROR_CONTEXT_LINES_MARGIN)..row0 {
-                write!(&mut result, "{}{}\n", indent, self.lines[i]);
+                write!(&mut result, "{}{}\n", indent, self.lines[i]).unwrap();
             }
 
             if row0 == row1 {
-                write!(&mut result, "{}\n", self.lines[row0]);
+                write!(&mut result, "{}\n", self.lines[row0]).unwrap();
                 write!(&mut result, "{}{}\n",
-                    " ".repeat(col0), err_fmt(&"^".repeat(col1 - col0)));
+                    " ".repeat(col0), err_fmt(&"^".repeat(col1 - col0))).unwrap();
             }
             else {
                 write!(&mut result, "{}{}{}\n",
-                    err_fmt("/-"), err_fmt(&"-".repeat(col0)), err_fmt("v"));
+                    err_fmt("/-"), err_fmt(&"-".repeat(col0)), err_fmt("v")).unwrap();
                 for i in row0..=row1 {
-                    write!(&mut result, "{} {}\n", err_fmt("|"), self.lines[i]);
+                    write!(&mut result, "{} {}\n", err_fmt("|"), self.lines[i]).unwrap();
                 }
                 write!(&mut result, "{}{}{}\n",
-                    err_fmt("\\-"), err_fmt(&"-".repeat(col1 - 1)), err_fmt("^"));
+                    err_fmt("\\-"), err_fmt(&"-".repeat(col1 - 1)), err_fmt("^")).unwrap();
             }
 
             for i in (row1 + 1)..(row1 + 1 + ERROR_CONTEXT_LINES_MARGIN) {
                 if i >= self.lines.len() {
                     break;
                 }
-                write!(&mut result, "{}{}\n", indent, self.lines[i]);
+                write!(&mut result, "{}{}\n", indent, self.lines[i]).unwrap();
             }
         }
 
-        write!(&mut result, "{}\n\n", err_fmt(msg));
+        write!(&mut result, "{}\n\n", err_fmt(msg)).unwrap();
 
         result
     }
