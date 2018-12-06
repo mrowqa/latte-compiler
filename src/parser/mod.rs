@@ -1,27 +1,18 @@
 lalrpop_mod!(latte, "/parser/latte.rs");
 use self::latte::ProgramParser;
-use model;
-use model::ast::{Span, Expr, InnerExpr, BinaryOp, UnaryOpInner,
-                 new_spanned_boxed};
+use model::ast::{Expr, InnerExpr, BinaryOp, UnaryOpInner, Program,
+    new_spanned_boxed};
 use codemap::CodeMap;
+use frontend_error::{FrontendError, FrontendResult};
 
-#[derive(Debug)]
-pub struct ParseError {
-    pub err: &'static str,
-    pub span: Span,
-}
 
 const KEYWORDS: &'static [&'static str] = &[
     "if", "else", "return", "while", "for", "new", "class", "extends",
     "true", "false", "null", "int", "string", "boolean", "void",
 ];
 
-pub fn parse(codemap: &CodeMap) -> Result<model::ast::Program, Vec<ParseError>> {
-    let code = replace_comments(codemap.get_code());
-    let code = match code {
-        Ok(without_comments) => without_comments,
-        Err(err) => return Err(vec![err]),
-    };
+pub fn parse(codemap: &CodeMap) -> FrontendResult<Program> {
+    let code = replace_comments(codemap.get_code())?;
 
     let mut errors = Vec::new();
     let result = ProgramParser::new().parse(&mut errors, &code);
@@ -36,8 +27,8 @@ pub fn parse(codemap: &CodeMap) -> Result<model::ast::Program, Vec<ParseError>> 
         },
         Err(_) => {
             if errors.is_empty() { // probably mustn't be empty
-                errors.push(ParseError {
-                    err: "Fatal syntax error: can not recognize anything",
+                errors.push(FrontendError {
+                    err: "Fatal syntax error: can not recognize anything".to_string(),
                     span: (0, code.len() - 1),
                 });
             }
@@ -46,21 +37,7 @@ pub fn parse(codemap: &CodeMap) -> Result<model::ast::Program, Vec<ParseError>> 
     }
 }
 
-pub fn parse_or_string_error(codemap: &CodeMap) -> Result<model::ast::Program, String> {
-    match parse(codemap) {
-        Ok(prog) => Ok(prog),
-        Err(errors) => {
-            let mut result = String::new();
-            for ParseError { err, span } in errors {
-                let msg = codemap.format_message(span, err);
-                result.push_str(&msg);
-            }
-            Err(result)
-        }
-    }
-}
-
-fn replace_comments(code: &str) -> Result<String, ParseError> {
+fn replace_comments(code: &str) -> FrontendResult<String> {
     let mut result = String::new();
 
     let mut last_ch = '\0';
@@ -122,10 +99,10 @@ fn replace_comments(code: &str) -> Result<String, ParseError> {
     }
 
     if erasing && multiline {
-        Err(ParseError{
-            err: "Multiline comment must be closed before EOF",
+        Err(vec![FrontendError {
+            err: "Multiline comment must be closed before EOF".to_string(),
             span: (code.len() - 1, code.len()),
-        })
+        }])
     }
     else {
         Ok(result)
@@ -179,12 +156,12 @@ fn optimize_const_expr_shallow(expr: InnerExpr) -> Result<InnerExpr, &'static st
 }
 
 fn return_or_fail(l: usize, result: Result<InnerExpr, &'static str>, r: usize,
-        errors: &mut Vec<ParseError>) -> Box<Expr> {
+        errors: &mut Vec<FrontendError>) -> Box<Expr> {
     match result {
         Ok(e) => new_spanned_boxed(l, e, r),
         Err(err) => {
-            errors.push(ParseError {
-                err,
+            errors.push(FrontendError {
+                err: err.to_string(),
                 span: (l, r),
             });
             new_spanned_boxed(l, InnerExpr::LitNull, r)
