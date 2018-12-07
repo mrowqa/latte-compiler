@@ -7,7 +7,7 @@ pub struct GlobalContext<'a> {
     functions: HashMap<&'a str, FunDesc<'a>>,
 }
 
-struct ClassDesc<'a> {
+pub struct ClassDesc<'a> {
     name: &'a str,
     parent_type: Option<&'a Type>,
     fields: HashMap<&'a str, &'a Type>,
@@ -35,6 +35,10 @@ impl<'a> GlobalContext<'a> {
         result.check_types_in_context_defs().accumulate_errors_in(&mut errors);
 
         if errors.is_empty() { Ok(result) } else { Err(errors) }
+    }
+
+    pub fn get_class_description(&self, cl_name: &str) -> Option<&ClassDesc<'a>> {
+        self.classes.get(cl_name)
     }
 
     fn scan_global_defenitions(&mut self, prog: &'a Program) -> FrontendResult<()> {
@@ -192,6 +196,8 @@ impl<'a> ClassDesc<'a> {
     }
 
     pub fn check_types(&self, ctx: &GlobalContext<'a>) -> FrontendResult<()> {
+        // todo check if proper method signature when overriding method
+        // todo some helper method for looking up methods in superclasses
         let mut errors = vec![];
         if let Some(t) = self.parent_type {
             ctx.check_superclass_type(t, self.name).accumulate_errors_in(&mut errors);

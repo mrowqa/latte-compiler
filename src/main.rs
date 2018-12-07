@@ -9,12 +9,13 @@ int main() {
     return 0;
 }
 
-class A { }
-class B extends A { }
-class C extends D { }
-class E extends E { }
-class X extends Y { }
-class Y extends X { }
+class A {
+    int a;
+
+    int foo(int b) {
+        return a+b+c;  // c not defined
+    }
+}
 
 "#);
     match res {

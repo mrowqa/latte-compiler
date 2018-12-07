@@ -1,6 +1,7 @@
 use super::global_context::GlobalContext;
+use super::function::FunctionContext;
 use model::ast::*;
-use frontend_error::FrontendResult;
+use frontend_error::{FrontendResult, ErrorAccumulation};
 
 pub struct SemanticAnalyzer<'a> {
     ast: &'a Program,
@@ -16,8 +17,9 @@ impl<'a> SemanticAnalyzer<'a> {
     }
 
     pub fn perform_full_analysis(&mut self) -> FrontendResult<()> {
-        let _ = self.calculate_global_context()?;
-        // todo...
+        // todo put somewhere check for main() signature
+        self.calculate_global_context()?;
+        self.analyze_functions()?;
         Ok(())
     }
 
@@ -33,5 +35,35 @@ impl<'a> SemanticAnalyzer<'a> {
             }
             Err(err) => Err(err),
         }
+    }
+
+    fn analyze_functions(&mut self) -> FrontendResult<()> {
+        let mut errors = vec![];
+        let err_msg = "Global analysis succeeded before function body analysis";
+        let gctx = self.ctx.as_ref().expect(err_msg);
+        let gfun_ctx = FunctionContext::new(None, &gctx);
+        for def in &self.ast.defs {
+            match def {
+                TopDef::FunDef(fun) => {
+                    gfun_ctx.analyze_function(&fun).accumulate_errors_in(&mut errors);
+                },
+                TopDef::ClassDef(cl) => {
+                    let cl_desc = gctx.get_class_description(&cl.name.inner).expect(err_msg);
+                    let cl_ctx = FunctionContext::new(Some(cl_desc), &gctx);
+                    for it in &cl.items {
+                        match &it.inner {
+                            InnerClassItemDef::Field(_, _) => (),
+                            InnerClassItemDef::Method(fun) => {
+                                cl_ctx.analyze_function(&fun).accumulate_errors_in(&mut errors);
+                            },
+                            InnerClassItemDef::Error => unreachable!(),
+                        }
+                    }
+                },
+                TopDef::Error => unreachable!(),
+            }
+        }
+
+        if errors.is_empty() { Ok(()) } else { Err(errors) }
     }
 }
