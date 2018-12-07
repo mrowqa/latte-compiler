@@ -45,7 +45,7 @@ pub struct Block {
 }
 
 #[derive(Debug)]
-pub struct ItemWithSpan<T> {
+pub struct ItemWithSpan<T> { // todo (rename to Node<T>)
     pub inner: T,
     pub span: Span,
 }
@@ -84,7 +84,7 @@ pub enum InnerType {
     Int,
     Bool,
     String,
-    Array(Box<Type>),
+    Array(Box<Type>), // todo leave only innertype?
     Class(String),
     Void,
 }

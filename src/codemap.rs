@@ -27,6 +27,7 @@ impl<'a> CodeMap<'a> {
         &self.code
     }
 
+    // todo don't start at newline in previous line
     pub fn format_message(&self, span: Span, msg: &str) -> String {
         assert!(span.0 <= span.1);
         let mut result = String::new();

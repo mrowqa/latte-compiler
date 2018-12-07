@@ -5,5 +5,6 @@ Zmiany w gramatyce:
 - komentarze zrobione recznie...
 - nie ma rzutowan typow
 - indeksowanie tablicy przez arr.[idx], bo: (poczatek funkcji, Stmt) Ident (*) "[" nie wiemy czy dalej Expr "]" czy samo "]" (typ nazwa = ..., czy arr[idx] = ...)
+- frontend stara sie zwrocic tyle bledow naraz, ile sie da
 
 Jest pretty printing bledow, w tym wielolinijkowych.
