@@ -9,21 +9,9 @@ int main() {
     return 0;
 }
 
-void main(void a) {}
-
-NonExistingClass test(NonExistingClass a) {}
-
-class A {
-    NonExistingClass f; // shouldn't be detected since it's redefined later
-
-    void a() {}
-}
-
-class A {
-    NonExistingClass b; 
-}
-
-bool properFoo(int x) { x; }
+int error() {}
+void
+readInt(int input) {}
 
 "#);
     match res {
