@@ -10,7 +10,7 @@ pub struct GlobalContext<'a> {
 struct ClassDesc<'a> {
     name: &'a str,
     #[allow(dead_code)] // todo remove
-    parent_name: Option<&'a str>,
+    parent_name: Option<&'a str>, // todo check if it exist
     fields: HashMap<&'a str, &'a Type>,
     methods: HashMap<&'a str, FunDesc<'a>>,
 }
@@ -23,10 +23,9 @@ struct FunDesc<'a> {
 
 impl<'a> GlobalContext<'a> {
     fn new_with_builtins() -> Self {
-        // todo add builtins
         GlobalContext {
             classes: HashMap::new(),
-            functions: HashMap::new(),
+            functions: get_builtin_functions(),
         }
     }
 
@@ -185,4 +184,51 @@ impl<'a> FunDesc<'a> {
 
         if errors.is_empty() { Ok(()) } else { Err(errors) }
     }
+}
+
+
+// --------------------------------------------------------
+// ----------------- builtins -----------------------------
+// --------------------------------------------------------
+fn get_builtin_functions() -> HashMap<&'static str, FunDesc<'static>>  {
+    let t_void = &Type {
+        inner: InnerType::Void,
+        span: (0, 0),
+    };
+    let t_int = &Type {
+        inner: InnerType::Int,
+        span: (0, 0),
+    };
+    let t_string = &Type {
+        inner: InnerType::String,
+        span: (0, 0),
+    };
+
+    let mut m = HashMap::new();
+    m.insert("printInt", FunDesc {
+        ret_type: t_void,
+        name: "printInt",
+        args_types: vec![t_int],
+    });
+    m.insert("printString", FunDesc {
+        ret_type: t_void,
+        name: "printString",
+        args_types: vec![t_string],
+    });
+    m.insert("error", FunDesc {
+        ret_type: t_void,
+        name: "error",
+        args_types: vec![],
+    });
+    m.insert("readInt", FunDesc {
+        ret_type: t_int,
+        name: "readInt",
+        args_types: vec![],
+    });
+    m.insert("readString", FunDesc {
+        ret_type: t_string,
+        name: "readString",
+        args_types: vec![],
+    });
+    m
 }
