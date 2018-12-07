@@ -9,8 +9,7 @@ pub struct GlobalContext<'a> {
 
 struct ClassDesc<'a> {
     name: &'a str,
-    #[allow(dead_code)] // todo remove
-    parent_name: Option<&'a str>, // todo check if it exist
+    parent_type: Option<&'a Type>,
     fields: HashMap<&'a str, &'a Type>,
     methods: HashMap<&'a str, FunDesc<'a>>,
 }
@@ -115,6 +114,45 @@ impl<'a> GlobalContext<'a> {
             self.check_type(t)
         }
     }
+
+    pub fn check_superclass_type(&self, t: &Type, my_name: &str) -> FrontendResult<()> {
+        if let InnerType::Class(parent_name) = &t.inner {
+            self.check_for_inheritance_cycle(my_name, &parent_name, t.span)
+        }
+        else {
+            Err(vec![FrontendError {
+                err: "Error: super class must be a class".to_string(),
+                span: t.span,
+            }])
+        }
+    }
+
+    fn check_for_inheritance_cycle(&self, start_name: &str, cur_name: &str, span: Span) -> FrontendResult<()> {
+        if let Some(cl) = self.classes.get(cur_name) {
+            if cl.name == start_name {
+                Err(vec![FrontendError {
+                    err: "Error: detected cycle in inheritance chain".to_string(),
+                    span: span,
+                }])
+            }
+            else if let Some(t) = cl.parent_type {
+                match &t.inner {
+                    InnerType::Class(parent_name) =>
+                        self.check_for_inheritance_cycle(start_name, &parent_name, span),
+                    _ => unreachable!(), // assumption: tree made by our parser
+                }
+            }
+            else {
+                Ok(())
+            }
+        }
+        else {
+            Err(vec![FrontendError {
+                err: "Error: invalid type - class not defined".to_string(),
+                span: span,
+            }])
+        }
+    }
 }
 
 impl<'a> ClassDesc<'a> {
@@ -122,7 +160,7 @@ impl<'a> ClassDesc<'a> {
         let mut errors = vec![];
         let mut result = ClassDesc {
             name: &cldef.name.inner,
-            parent_name: cldef.parent_name.as_ref().map(|id| id.inner.as_str()),
+            parent_type: cldef.parent_type.as_ref(),
             fields: HashMap::new(),
             methods: HashMap::new(),
         };
@@ -155,6 +193,9 @@ impl<'a> ClassDesc<'a> {
 
     pub fn check_types(&self, ctx: &GlobalContext<'a>) -> FrontendResult<()> {
         let mut errors = vec![];
+        if let Some(t) = self.parent_type {
+            ctx.check_superclass_type(t, self.name).accumulate_errors_in(&mut errors);
+        }
         for t in self.fields.values() {
             ctx.check_type(t).accumulate_errors_in(&mut errors);
         }

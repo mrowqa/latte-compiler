@@ -42,10 +42,10 @@ TopDef: TopDef = {
 }
 
 ClassDef: ClassDef = {
-    <l:@L> "class" <id1:Ident> <id2:("extends" <Ident>)?> "{" <v:ClassItemDef*> "}" <r:@R> => {
+    <l:@L> "class" <id:Ident> <t:("extends" <Type>)?> "{" <v:ClassItemDef*> "}" <r:@R> => {
         ClassDef {
-            name: id1,
-            parent_name: id2,
+            name: id,
+            parent_type: t,
             items: v,
             span: (l, r),
         }

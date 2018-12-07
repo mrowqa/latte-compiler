@@ -16,7 +16,7 @@ pub type Ident = ItemWithSpan<String>;
 #[derive(Debug)]
 pub struct ClassDef {
     pub name: Ident,
-    pub parent_name: Option<Ident>,
+    pub parent_type: Option<Type>,
     pub items: Vec<ClassItemDef>,
     pub span: Span,
 }

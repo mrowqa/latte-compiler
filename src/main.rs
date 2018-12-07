@@ -9,9 +9,12 @@ int main() {
     return 0;
 }
 
-int error() {}
-void
-readInt(int input) {}
+class A { }
+class B extends A { }
+class C extends D { }
+class E extends E { }
+class X extends Y { }
+class Y extends X { }
 
 "#);
     match res {
