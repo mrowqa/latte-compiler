@@ -32,7 +32,7 @@ impl<'a> GlobalContext<'a> {
         let mut result = GlobalContext::new_with_builtins();
         let mut errors = vec![];
         result.scan_global_defenitions(prog).accumulate_errors_in(&mut errors);
-        result.check_types_in_defs().accumulate_errors_in(&mut errors);
+        result.check_types_in_context_defs().accumulate_errors_in(&mut errors);
 
         if errors.is_empty() { Ok(result) } else { Err(errors) }
     }
@@ -71,7 +71,7 @@ impl<'a> GlobalContext<'a> {
         if errors.is_empty() { Ok(()) } else { Err(errors) }
     }
 
-    fn check_types_in_defs(&mut self) -> FrontendResult<()> {
+    fn check_types_in_context_defs(&mut self) -> FrontendResult<()> {
         let mut errors = vec![];
         for f in self.functions.values() {
             f.check_types(&self).accumulate_errors_in(&mut errors);
@@ -83,10 +83,10 @@ impl<'a> GlobalContext<'a> {
         if errors.is_empty() { Ok(()) } else { Err(errors) }
     }
 
-    pub fn check_type(&self, t: &Type) -> FrontendResult<()> {
+    pub fn check_local_var_type(&self, t: &Type) -> FrontendResult<()> {
         use self::InnerType::*;
         match &t.inner {
-            Array(subtype) => self.check_type(&subtype), // theoretically we could pass the span, so it would contain trailing "[]"
+            Array(subtype) => self.check_local_var_type(&subtype), // theoretically we could pass the span, so it would contain trailing "[]"
             Class(name) => {
                 if self.classes.contains_key(name.as_str()) {
                     Ok(())
@@ -111,7 +111,7 @@ impl<'a> GlobalContext<'a> {
             Ok(())
         }
         else {
-            self.check_type(t)
+            self.check_local_var_type(t)
         }
     }
 
@@ -197,7 +197,7 @@ impl<'a> ClassDesc<'a> {
             ctx.check_superclass_type(t, self.name).accumulate_errors_in(&mut errors);
         }
         for t in self.fields.values() {
-            ctx.check_type(t).accumulate_errors_in(&mut errors);
+            ctx.check_local_var_type(t).accumulate_errors_in(&mut errors);
         }
         for f in self.methods.values() {
             f.check_types(ctx).accumulate_errors_in(&mut errors);
@@ -220,7 +220,7 @@ impl<'a> FunDesc<'a> {
         let mut errors = vec![];
         ctx.check_ret_type(self.ret_type).accumulate_errors_in(&mut errors);
         for t in &self.args_types {
-            ctx.check_type(t).accumulate_errors_in(&mut errors);
+            ctx.check_local_var_type(t).accumulate_errors_in(&mut errors);
         }
 
         if errors.is_empty() { Ok(()) } else { Err(errors) }
