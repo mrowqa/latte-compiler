@@ -18,7 +18,7 @@ enum TypeWrapper<'a> {
     Fun(FunDesc<'a>),
 }
 
-struct FunDesc<'a> {
+pub struct FunDesc<'a> {
     pub ret_type: &'a Type,
     pub name: &'a str,
     pub args_types: Vec<&'a Type>,
@@ -124,6 +124,7 @@ impl<'a> GlobalContext<'a> {
                 span: t.span,
             }]),
             Int | Bool | String => Ok(()),
+            Null => unreachable!(),
         }
     }
 
@@ -176,7 +177,11 @@ impl<'a> GlobalContext<'a> {
         }
     }
 
-    pub fn check_types_compatibility(&self, _lhs: &'a Type, _rhs: &'a Type) -> FrontendResult<()> {
+    pub fn check_types_compatibility(
+        &self,
+        _lhs: &'a InnerType,
+        _rhs: &'a InnerType,
+    ) -> FrontendResult<()> {
         Ok(()) // todo, nulls, class hierarchy
     }
 }

@@ -10,7 +10,7 @@ int main() {
     return 0;
 }
 
-void test(int a, boolean a) { }
+void test(int a, boolean a) { int b, b; int a; boolean a; }
 
 class A {
     int a;

@@ -99,6 +99,7 @@ pub enum InnerType {
     String,
     Array(Box<InnerType>),
     Class(String),
+    Null,
     Void,
 }
 
@@ -136,9 +137,9 @@ pub enum InnerExpr {
     },
 }
 
-pub type UnaryOp = ItemWithSpan<UnaryOpInner>;
+pub type UnaryOp = ItemWithSpan<InnerUnaryOp>;
 #[derive(Debug)]
-pub enum UnaryOpInner {
+pub enum InnerUnaryOp {
     IntNeg,
     BoolNeg,
 }

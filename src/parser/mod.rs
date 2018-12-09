@@ -2,7 +2,7 @@ lalrpop_mod!(#[allow(clippy::all)] pub latte, "/parser/latte.rs");
 use self::latte::ProgramParser;
 use codemap::CodeMap;
 use frontend_error::{FrontendError, FrontendResult};
-use model::ast::{new_spanned_boxed, BinaryOp, Expr, InnerExpr, Program, UnaryOpInner};
+use model::ast::{new_spanned_boxed, BinaryOp, Expr, InnerExpr, InnerUnaryOp, Program};
 
 const KEYWORDS: &[&str] = &[
     "if", "else", "return", "while", "for", "new", "class", "extends", "true", "false", "null",
@@ -114,7 +114,7 @@ fn replace_comments(code: &str) -> FrontendResult<String> {
 fn optimize_const_expr_shallow(expr: InnerExpr) -> Result<InnerExpr, &'static str> {
     use self::BinaryOp::*;
     use self::InnerExpr::*;
-    use self::UnaryOpInner::*;
+    use self::InnerUnaryOp::*;
     let e = match expr {
         BinaryOp(ref lhs, ref op, ref rhs) => match (&lhs.inner, op, &rhs.inner) {
             (LitBool(l), And, LitBool(r)) => LitBool(*l && *r),

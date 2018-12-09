@@ -280,8 +280,8 @@ LitStr: InnerExpr = { String => InnerExpr::LitStr(<>) };
 FunCallArgs = VecSeparated<Expr, ",">;
 
 UnaryOp: Box<UnaryOp> = {
-    <l:@L> "-" <r:@R> => new_spanned_boxed(l, UnaryOpInner::IntNeg, r),
-    <l:@L> "!" <r:@R> => new_spanned_boxed(l, UnaryOpInner::BoolNeg, r),
+    <l:@L> "-" <r:@R> => new_spanned_boxed(l, InnerUnaryOp::IntNeg, r),
+    <l:@L> "!" <r:@R> => new_spanned_boxed(l, InnerUnaryOp::BoolNeg, r),
 }
 
 LogicOrOp: BinaryOp = {
