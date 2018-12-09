@@ -92,12 +92,12 @@ pub enum InnerStmt {
 }
 
 pub type Type = ItemWithSpan<InnerType>;
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InnerType {
     Int,
     Bool,
     String,
-    Array(Box<Type>), // todo leave only innertype?
+    Array(Box<InnerType>),
     Class(String),
     Void,
 }

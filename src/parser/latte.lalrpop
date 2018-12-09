@@ -173,7 +173,7 @@ Type: Type = {
     <l:@L> "void" <r:@R> => new_spanned(l, InnerType::Void, r),
     <t:Type> "[" "]" <r:@R> => {
         let (l, r) = (t.span.0, r);
-        let t = InnerType::Array(Box::new(t));
+        let t = InnerType::Array(Box::new(t.inner));
         new_spanned(l, t, r)
     },
     <id:Ident> => {

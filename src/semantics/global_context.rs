@@ -10,8 +10,12 @@ pub struct GlobalContext<'a> {
 pub struct ClassDesc<'a> {
     name: &'a str,
     parent_type: Option<&'a Type>,
-    fields: HashMap<&'a str, &'a Type>,
-    methods: HashMap<&'a str, FunDesc<'a>>,
+    items: HashMap<&'a str, TypeWrapper<'a>>,
+}
+
+enum TypeWrapper<'a> {
+    Var(&'a Type),
+    Fun(FunDesc<'a>),
 }
 
 struct FunDesc<'a> {
@@ -98,7 +102,13 @@ impl<'a> GlobalContext<'a> {
     pub fn check_local_var_type(&self, t: &Type) -> FrontendResult<()> {
         use self::InnerType::*;
         match &t.inner {
-            Array(subtype) => self.check_local_var_type(&subtype), // theoretically we could pass the span, so it would contain trailing "[]"
+            Array(subtype) => {
+                let tt = Type {
+                    inner: *subtype.clone(),
+                    span: t.span,
+                };
+                self.check_local_var_type(&tt)
+            }
             Class(name) => {
                 if self.classes.contains_key(name.as_str()) {
                     Ok(())
@@ -177,30 +187,31 @@ impl<'a> ClassDesc<'a> {
         let mut result = ClassDesc {
             name: &cldef.name.inner,
             parent_type: cldef.parent_type.as_ref(),
-            fields: HashMap::new(),
-            methods: HashMap::new(),
+            items: HashMap::new(),
         };
 
-        for item in &cldef.items {
-            match &item.inner {
-                InnerClassItemDef::Field(t, id) => {
-                    if result.fields.insert(&id.inner, t).is_some() {
-                        errors.push(FrontendError {
-                            err: "Error: field redefinition".to_string(),
-                            span: item.span,
-                        });
-                    }
+        // scope for the closure which borrows errors
+        {
+            let mut add_or_error = |name: &'a str, t: TypeWrapper<'a>, span: Span| {
+                if result.items.insert(name, t).is_some() {
+                    errors.push(FrontendError {
+                        err: "Error: class item redefinition".to_string(),
+                        span: span,
+                    });
                 }
-                InnerClassItemDef::Method(fun) => {
-                    let fun_desc = FunDesc::from(&fun);
-                    if result.methods.insert(fun_desc.name, fun_desc).is_some() {
-                        errors.push(FrontendError {
-                            err: "Error: method redefinition".to_string(),
-                            span: fun.name.span,
-                        });
+            };
+
+            for item in &cldef.items {
+                match &item.inner {
+                    InnerClassItemDef::Field(t, id) => {
+                        add_or_error(&id.inner, TypeWrapper::Var(t), item.span)
                     }
+                    InnerClassItemDef::Method(fun) => {
+                        let fun_desc = FunDesc::from(&fun);
+                        add_or_error(fun_desc.name, TypeWrapper::Fun(fun_desc), fun.name.span)
+                    }
+                    InnerClassItemDef::Error => unreachable!(),
                 }
-                InnerClassItemDef::Error => unreachable!(),
             }
         }
 
@@ -214,17 +225,21 @@ impl<'a> ClassDesc<'a> {
     pub fn check_types(&self, ctx: &GlobalContext<'a>) -> FrontendResult<()> {
         // todo check if proper method signature when overriding method
         // todo some helper method for looking up methods in superclasses
+        // todo handle properly fields vs methods while inheriting them
         let mut errors = vec![];
         if let Some(t) = self.parent_type {
             ctx.check_superclass_type(t, self.name)
                 .accumulate_errors_in(&mut errors);
         }
-        for t in self.fields.values() {
-            ctx.check_local_var_type(t)
-                .accumulate_errors_in(&mut errors);
-        }
-        for f in self.methods.values() {
-            f.check_types(ctx).accumulate_errors_in(&mut errors);
+        for t in self.items.values() {
+            match t {
+                TypeWrapper::Var(var_type) => ctx
+                    .check_local_var_type(var_type)
+                    .accumulate_errors_in(&mut errors),
+                TypeWrapper::Fun(fun_desc) => {
+                    fun_desc.check_types(ctx).accumulate_errors_in(&mut errors)
+                }
+            }
         }
 
         ok_if_no_error(errors)
