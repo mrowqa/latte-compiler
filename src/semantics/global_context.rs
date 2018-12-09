@@ -157,6 +157,10 @@ impl<'a> GlobalContext<'a> {
             }])
         }
     }
+
+    pub fn check_types_compatibility(&self, _lhs: &'a Type, _rhs: &'a Type) -> FrontendResult<()> {
+        Ok(()) // todo, nulls, class hierarchy
+    }
 }
 
 impl<'a> ClassDesc<'a> {
