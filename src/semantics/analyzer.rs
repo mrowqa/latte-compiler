@@ -24,7 +24,7 @@ impl<'a> SemanticAnalyzer<'a> {
     }
 
     fn calculate_global_context(&mut self) -> FrontendResult<()> {
-        if let Some(_) = self.ctx {
+        if self.ctx.is_some() {
             return Ok(());
         }
 

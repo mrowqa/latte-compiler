@@ -38,43 +38,43 @@ impl<'a> CodeMap<'a> {
 
         match beg_row_col {
             Some((row, col)) => {
-                write!(&mut result, "{}:{}:{}:\n", self.filename, row, col).unwrap();
+                writeln!(&mut result, "{}:{}:{}:", self.filename, row, col).unwrap();
             }
             None => {
-                write!(&mut result, "{}:{}:\n", self.filename, span.0).unwrap();
+                writeln!(&mut result, "{}:{}:", self.filename, span.0).unwrap();
             }
         };
 
         if let (Some((row0, col0)), Some((row1, col1))) = (beg_row_col, end_row_col) {
             let indent = if row0 == row1 { "" } else { "  " };
             for i in max(0, row0 - ERROR_CONTEXT_LINES_MARGIN)..row0 {
-                write!(&mut result, "{}{}\n", indent, self.lines[i]).unwrap();
+                writeln!(&mut result, "{}{}", indent, self.lines[i]).unwrap();
             }
 
             if row0 == row1 {
-                write!(&mut result, "{}\n", self.lines[row0]).unwrap();
-                write!(
+                writeln!(&mut result, "{}", self.lines[row0]).unwrap();
+                writeln!(
                     &mut result,
-                    "{}{}\n",
+                    "{}{}",
                     " ".repeat(col0),
                     err_fmt(&"^".repeat(col1 - col0))
                 )
                 .unwrap();
             } else {
-                write!(
+                writeln!(
                     &mut result,
-                    "{}{}{}\n",
+                    "{}{}{}",
                     err_fmt("/-"),
                     err_fmt(&"-".repeat(col0)),
                     err_fmt("v")
                 )
                 .unwrap();
                 for i in row0..=row1 {
-                    write!(&mut result, "{} {}\n", err_fmt("|"), self.lines[i]).unwrap();
+                    writeln!(&mut result, "{} {}", err_fmt("|"), self.lines[i]).unwrap();
                 }
-                write!(
+                writeln!(
                     &mut result,
-                    "{}{}{}\n",
+                    "{}{}{}",
                     err_fmt("\\-"),
                     err_fmt(&"-".repeat(col1 - 1)),
                     err_fmt("^")
@@ -86,7 +86,7 @@ impl<'a> CodeMap<'a> {
                 if i >= self.lines.len() {
                     break;
                 }
-                write!(&mut result, "{}{}\n", indent, self.lines[i]).unwrap();
+                writeln!(&mut result, "{}{}", indent, self.lines[i]).unwrap();
             }
         }
 
@@ -97,14 +97,12 @@ impl<'a> CodeMap<'a> {
 
     fn find_row_col(&self, pos: usize) -> Option<(usize, usize)> {
         let mut cur_pos = 0usize;
-        let mut row = 0;
 
-        for line in &self.lines {
+        for (row, line) in self.lines.iter().enumerate() {
             if pos < cur_pos + line.len() + 1 {
                 return Some((row, pos - cur_pos));
             }
             cur_pos += line.len() + 1;
-            row += 1;
         }
 
         None

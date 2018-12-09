@@ -28,13 +28,13 @@ impl<'a> FunctionContext<'a> {
             self.add_variable_to_env(t, id, &mut env)
                 .accumulate_errors_in(&mut errors);
         }
-        self.enter_block(&fun.body, env)
+        self.enter_block(&fun.body, &env)
             .accumulate_errors_in(&mut errors);
 
         ok_if_no_error(errors)
     }
 
-    fn enter_block(&self, block: &'a Block, parent_env: VarEnv<'a>) -> FrontendResult<()> {
+    fn enter_block(&self, block: &'a Block, parent_env: &VarEnv<'a>) -> FrontendResult<()> {
         // todo
         let mut errors = vec![];
         let mut cur_env = HashMap::new();
@@ -47,7 +47,7 @@ impl<'a> FunctionContext<'a> {
                 Block(bl) => {
                     let mut new_env = parent_env.clone();
                     new_env.extend(&cur_env);
-                    self.enter_block(&bl, new_env)
+                    self.enter_block(&bl, &new_env)
                         .accumulate_errors_in(&mut errors);
                 }
                 Decl {
@@ -58,7 +58,7 @@ impl<'a> FunctionContext<'a> {
                         .check_local_var_type(&var_type)
                         .accumulate_errors_in(&mut errors);
                     for (id, init_expr) in var_items {
-                        if let Some(_) = cur_env.insert(id.inner.as_ref(), &var_type) {
+                        if cur_env.insert(id.inner.as_ref(), &var_type).is_some() {
                             errors.push(FrontendError {
                                 err: "Error: variable already defined in this scope".to_string(),
                                 span: id.span,
@@ -86,7 +86,7 @@ impl<'a> FunctionContext<'a> {
         cur_env: &mut VarEnv<'a>,
     ) -> FrontendResult<()> {
         self.global_ctx.check_local_var_type(var_type)?;
-        if let Some(_) = cur_env.insert(name.inner.as_ref(), var_type) {
+        if cur_env.insert(name.inner.as_ref(), var_type).is_some() {
             Err(vec![FrontendError {
                 err: "Error: variable already defined in current scope".to_string(),
                 span: name.span,

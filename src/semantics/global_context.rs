@@ -55,7 +55,7 @@ impl<'a> GlobalContext<'a> {
             match def {
                 TopDef::FunDef(fun) => {
                     let fun_desc = FunDesc::from(&fun);
-                    if let Some(_) = self.functions.insert(fun_desc.name, fun_desc) {
+                    if self.functions.insert(fun_desc.name, fun_desc).is_some() {
                         errors.push(FrontendError {
                             err: "Error: function redefinition".to_string(),
                             span: fun.name.span,
@@ -66,7 +66,7 @@ impl<'a> GlobalContext<'a> {
                     let class_desc_res = ClassDesc::from(&cl);
                     match class_desc_res {
                         Ok(desc) => {
-                            if let Some(_) = self.classes.insert(desc.name, desc) {
+                            if self.classes.insert(desc.name, desc).is_some() {
                                 errors.push(FrontendError {
                                     err: "Error: class redefinition".to_string(),
                                     span: cl.name.span,
@@ -184,7 +184,7 @@ impl<'a> ClassDesc<'a> {
         for item in &cldef.items {
             match &item.inner {
                 InnerClassItemDef::Field(t, id) => {
-                    if let Some(_) = result.fields.insert(&id.inner, t) {
+                    if result.fields.insert(&id.inner, t).is_some() {
                         errors.push(FrontendError {
                             err: "Error: field redefinition".to_string(),
                             span: item.span,
@@ -193,7 +193,7 @@ impl<'a> ClassDesc<'a> {
                 }
                 InnerClassItemDef::Method(fun) => {
                     let fun_desc = FunDesc::from(&fun);
-                    if let Some(_) = result.methods.insert(fun_desc.name, fun_desc) {
+                    if result.methods.insert(fun_desc.name, fun_desc).is_some() {
                         errors.push(FrontendError {
                             err: "Error: method redefinition".to_string(),
                             span: fun.name.span,

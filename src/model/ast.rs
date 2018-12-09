@@ -57,7 +57,7 @@ pub fn new_spanned_boxed<T>(l: usize, inner: T, r: usize) -> Box<ItemWithSpan<T>
 }
 pub fn new_spanned<T>(l: usize, inner: T, r: usize) -> ItemWithSpan<T> {
     ItemWithSpan {
-        inner: inner,
+        inner,
         span: (l, r),
     }
 }

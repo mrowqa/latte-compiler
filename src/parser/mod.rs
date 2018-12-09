@@ -1,10 +1,10 @@
-lalrpop_mod!(latte, "/parser/latte.rs");
+lalrpop_mod!(#[allow(clippy::all)] pub latte, "/parser/latte.rs");
 use self::latte::ProgramParser;
 use codemap::CodeMap;
 use frontend_error::{FrontendError, FrontendResult};
 use model::ast::{new_spanned_boxed, BinaryOp, Expr, InnerExpr, Program, UnaryOpInner};
 
-const KEYWORDS: &'static [&'static str] = &[
+const KEYWORDS: &[&str] = &[
     "if", "else", "return", "while", "for", "new", "class", "extends", "true", "false", "null",
     "int", "string", "boolean", "void",
 ];

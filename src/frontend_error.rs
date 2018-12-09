@@ -9,7 +9,7 @@ pub struct FrontendError {
     pub span: Span,
 }
 
-pub fn format_errors(codemap: &CodeMap, errors: &Vec<FrontendError>) -> String {
+pub fn format_errors(codemap: &CodeMap, errors: &[FrontendError]) -> String {
     let mut result = String::new();
     for FrontendError { err, span } in errors {
         let msg = codemap.format_message(*span, &err);
