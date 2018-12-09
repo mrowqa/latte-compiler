@@ -2,9 +2,10 @@ extern crate latte_compiler;
 
 use latte_compiler::compile;
 
-
 fn main() {
-    let res = compile("input", r#"
+    let res = compile(
+        "input",
+        r#"
 int main() {
     return 0;
 }
@@ -19,7 +20,8 @@ class A {
     }
 }
 
-"#);
+"#,
+    );
     match res {
         Ok(prog) => println!("{:?}", prog),
         Err(msg) => println!("{}", msg),

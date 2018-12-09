@@ -45,7 +45,8 @@ pub struct Block {
 }
 
 #[derive(Debug)]
-pub struct ItemWithSpan<T> { // todo (rename to Node<T>)
+pub struct ItemWithSpan<T> {
+    // todo (rename to Node<T>)
     pub inner: T,
     pub span: Span,
 }
@@ -66,14 +67,26 @@ pub type Stmt = ItemWithSpan<InnerStmt>;
 pub enum InnerStmt {
     Empty,
     Block(Block),
-    Decl{var_type: Type, var_items: Vec<(Ident, Option<Box<Expr>>)>},
+    Decl {
+        var_type: Type,
+        var_items: Vec<(Ident, Option<Box<Expr>>)>,
+    },
     Assign(Box<Expr>, Box<Expr>),
     Incr(Box<Expr>),
     Decr(Box<Expr>),
     Ret(Option<Box<Expr>>),
-    Cond{cond: Box<Expr>, true_branch: Box<Stmt>, false_branch: Option<Box<Stmt>>},
+    Cond {
+        cond: Box<Expr>,
+        true_branch: Box<Stmt>,
+        false_branch: Option<Box<Stmt>>,
+    },
     While(Box<Expr>, Box<Stmt>),
-    ForEach{iter_type: Type, iter_name: Ident, array: Box<Expr>, body: Box<Stmt>},
+    ForEach {
+        iter_type: Type,
+        iter_name: Ident,
+        array: Box<Expr>,
+        body: Box<Stmt>,
+    },
     Expr(Box<Expr>),
     Error,
 }
@@ -97,14 +110,30 @@ pub enum InnerExpr {
     LitBool(bool),
     LitStr(String),
     LitNull,
-    FunCall{function_name: Ident, args: Vec<Box<Expr>>},
+    FunCall {
+        function_name: Ident,
+        args: Vec<Box<Expr>>,
+    },
     BinaryOp(Box<Expr>, BinaryOp, Box<Expr>),
     UnaryOp(UnaryOp, Box<Expr>),
-    NewArray{elem_type: Type, elem_cnt: Box<Expr>},
-    ArrayElem{array: Box<Expr>, index: Box<Expr>},
+    NewArray {
+        elem_type: Type,
+        elem_cnt: Box<Expr>,
+    },
+    ArrayElem {
+        array: Box<Expr>,
+        index: Box<Expr>,
+    },
     NewObject(Type),
-    ObjField{obj: Box<Expr>, field: Ident},
-    ObjMethodCall{obj: Box<Expr>, method_name: Ident, args: Vec<Box<Expr>>},
+    ObjField {
+        obj: Box<Expr>,
+        field: Ident,
+    },
+    ObjMethodCall {
+        obj: Box<Expr>,
+        method_name: Ident,
+        args: Vec<Box<Expr>>,
+    },
 }
 
 pub type UnaryOp = ItemWithSpan<UnaryOpInner>;

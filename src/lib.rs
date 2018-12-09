@@ -2,11 +2,11 @@
 extern crate lalrpop_util;
 extern crate colored;
 
+pub mod codemap;
+pub mod frontend_error;
 pub mod model;
 pub mod parser;
-pub mod codemap;
 pub mod semantics;
-pub mod frontend_error;
 
 // tmp function for development & testing
 pub fn compile(filename: &str, code: &str) -> Result<String, String> {

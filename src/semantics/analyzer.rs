@@ -1,7 +1,7 @@
-use super::global_context::GlobalContext;
 use super::function::FunctionContext;
+use super::global_context::GlobalContext;
+use frontend_error::{ok_if_no_error, ErrorAccumulation, FrontendResult};
 use model::ast::*;
-use frontend_error::{FrontendResult, ErrorAccumulation};
 
 pub struct SemanticAnalyzer<'a> {
     ast: &'a Program,
@@ -45,8 +45,10 @@ impl<'a> SemanticAnalyzer<'a> {
         for def in &self.ast.defs {
             match def {
                 TopDef::FunDef(fun) => {
-                    gfun_ctx.analyze_function(&fun).accumulate_errors_in(&mut errors);
-                },
+                    gfun_ctx
+                        .analyze_function(&fun)
+                        .accumulate_errors_in(&mut errors);
+                }
                 TopDef::ClassDef(cl) => {
                     let cl_desc = gctx.get_class_description(&cl.name.inner).expect(err_msg);
                     let cl_ctx = FunctionContext::new(Some(cl_desc), &gctx);
@@ -54,16 +56,18 @@ impl<'a> SemanticAnalyzer<'a> {
                         match &it.inner {
                             InnerClassItemDef::Field(_, _) => (),
                             InnerClassItemDef::Method(fun) => {
-                                cl_ctx.analyze_function(&fun).accumulate_errors_in(&mut errors);
-                            },
+                                cl_ctx
+                                    .analyze_function(&fun)
+                                    .accumulate_errors_in(&mut errors);
+                            }
                             InnerClassItemDef::Error => unreachable!(),
                         }
                     }
-                },
+                }
                 TopDef::Error => unreachable!(),
             }
         }
 
-        if errors.is_empty() { Ok(()) } else { Err(errors) }
+        ok_if_no_error(errors)
     }
 }
