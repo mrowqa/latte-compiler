@@ -77,22 +77,22 @@ pub enum InnerStmt {
     Ret(Option<Box<Expr>>),
     Cond {
         cond: Box<Expr>,
-        true_branch: Box<Stmt>,
-        false_branch: Option<Box<Stmt>>,
+        true_branch: Block,
+        false_branch: Option<Block>,
     },
-    While(Box<Expr>, Box<Stmt>),
+    While(Box<Expr>, Block),
     ForEach {
         iter_type: Type,
         iter_name: Ident,
         array: Box<Expr>,
-        body: Box<Stmt>,
+        body: Block,
     },
     Expr(Box<Expr>),
     Error,
 }
 
 pub type Type = ItemWithSpan<InnerType>;
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum InnerType {
     Int,
     Bool,

@@ -9,22 +9,22 @@ pub struct FunctionContext<'a> {
     global_ctx: &'a GlobalContext<'a>,
 }
 
-enum VarEnv<'a> {
+enum Env<'a> {
     Root(&'a FunctionContext<'a>),
     Nested {
         #[allow(dead_code)] // todo remove
-        parent: &'a VarEnv<'a>,
+        parent: &'a Env<'a>,
         locals: HashMap<&'a str, &'a Type>,
     },
 }
 
-impl<'a> VarEnv<'a> {
-    pub fn new_root(fctx: &'a FunctionContext<'a>) -> VarEnv<'a> {
-        VarEnv::Root(fctx)
+impl<'a> Env<'a> {
+    pub fn new_root(fctx: &'a FunctionContext<'a>) -> Env<'a> {
+        Env::Root(fctx)
     }
 
-    pub fn new_nested(parent: &'a VarEnv<'a>) -> VarEnv<'a> {
-        VarEnv::Nested {
+    pub fn new_nested(parent: &'a Env<'a>) -> Env<'a> {
+        Env::Nested {
             parent,
             locals: HashMap::new(),
         }
@@ -32,8 +32,8 @@ impl<'a> VarEnv<'a> {
 
     pub fn add_variable(&mut self, var_type: &'a Type, name: &'a Ident) -> FrontendResult<()> {
         match self {
-            VarEnv::Root(_) => unreachable!(),
-            VarEnv::Nested { ref mut locals, .. } => {
+            Env::Root(_) => unreachable!(),
+            Env::Nested { ref mut locals, .. } => {
                 if locals.insert(name.inner.as_ref(), var_type).is_some() {
                     Err(vec![FrontendError {
                         err: "Error: variable already defined in current scope".to_string(),
@@ -66,8 +66,8 @@ impl<'a> FunctionContext<'a> {
     pub fn analyze_function(&self, fun: &'a FunDef) -> FrontendResult<()> {
         // todo support class context
         let mut errors = vec![];
-        let root = VarEnv::new_root(&self);
-        let mut params_env = VarEnv::new_nested(&root);
+        let root = Env::new_root(&self);
+        let mut params_env = Env::new_nested(&root);
         for (t, id) in &fun.args {
             match self.global_ctx.check_local_var_type(&t) {
                 Ok(()) => params_env
@@ -76,26 +76,47 @@ impl<'a> FunctionContext<'a> {
                 Err(err) => errors.extend(err),
             }
         }
-        self.enter_block(&fun.body, &params_env)
-            .accumulate_errors_in(&mut errors);
+
+        match (
+            self.enter_block(&fun, &fun.body, &params_env),
+            &fun.ret_type.inner,
+        ) {
+            (Ok(true), _) | (Ok(false), InnerType::Void) => (),
+            (Ok(false), _) => errors.push(FrontendError {
+                err: "Error: detected potential execution path without return".to_string(),
+                span: fun.body.span,
+            }),
+            (Err(err), _) => errors.extend(err),
+        }
 
         ok_if_no_error(errors)
     }
 
-    fn enter_block(&self, block: &'a Block, parent_env: &VarEnv<'a>) -> FrontendResult<()> {
-        // todo stmts
+    // return value: if block always returns
+    fn enter_block(
+        &self,
+        fun: &'a FunDef,
+        block: &'a Block,
+        parent_env: &Env<'a>,
+    ) -> FrontendResult<bool> {
         let mut errors = vec![];
-        let mut cur_env = VarEnv::new_nested(&parent_env);
-        // todo track if block returns
+        let mut cur_env = Env::new_nested(&parent_env);
+        let mut after_ret = false;
 
         use self::InnerStmt::*;
         for st in &block.stmts {
+            if after_ret {
+                errors.push(FrontendError {
+                    err: "Error: unreachable statement after return statement".to_string(),
+                    span: st.span,
+                })
+            }
             match &st.inner {
                 Empty => (),
-                Block(bl) => {
-                    self.enter_block(&bl, &cur_env)
-                        .accumulate_errors_in(&mut errors);
-                }
+                Block(bl) => match self.enter_block(fun, &bl, &cur_env) {
+                    Ok(does_ret) => after_ret = does_ret,
+                    Err(err) => errors.extend(err),
+                },
                 Decl {
                     var_type,
                     var_items,
@@ -119,22 +140,111 @@ impl<'a> FunctionContext<'a> {
                         }
                     }
                 }
+                Assign(lhs, rhs) => {
+                    // todo (optional) can check both sides of '=' for more errors
+                    self.check_if_lvalue(&lhs).accumulate_errors_in(&mut errors);
+                    match self.check_expression_get_type(&lhs, &cur_env) {
+                        Ok(t) => self
+                            .check_expression_check_type(&rhs, &t, &cur_env)
+                            .accumulate_errors_in(&mut errors),
+                        Err(err) => errors.extend(err),
+                    }
+                }
+                Incr(e) | Decr(e) => {
+                    self.check_if_lvalue(&e).accumulate_errors_in(&mut errors);
+                    self.check_expression_check_type(&e, &InnerType::Int, &cur_env)
+                        .accumulate_errors_in(&mut errors);
+                }
+                Ret(opt_expr) => {
+                    after_ret = true;
+                    match opt_expr {
+                        Some(ret_expr) => self
+                            .check_expression_check_type(&ret_expr, &fun.ret_type.inner, &cur_env)
+                            .accumulate_errors_in(&mut errors),
+                        None => {
+                            if fun.ret_type.inner != InnerType::Void {
+                                errors.push(FrontendError {
+                                    err: "Error: type of returned expression mismatch declared return type"
+                                        .to_string(),
+                                    span: st.span,
+                                })
+                            }
+                        }
+                    };
+                }
+                Cond {
+                    cond,
+                    true_branch,
+                    false_branch,
+                } => {
+                    // todo (optional) check if cond is just true or false
+                    self.check_expression_check_type(&cond, &InnerType::Bool, &cur_env)
+                        .accumulate_errors_in(&mut errors);
+                    let br1_ret = match self.enter_block(fun, &true_branch, &cur_env) {
+                        Ok(does_ret) => does_ret,
+                        Err(err) => {
+                            errors.extend(err);
+                            false
+                        }
+                    };
+                    let br2_ret = match false_branch {
+                        Some(bl) => match self.enter_block(fun, &bl, &cur_env) {
+                            Ok(does_ret) => does_ret,
+                            Err(err) => {
+                                errors.extend(err);
+                                false
+                            }
+                        },
+                        None => true,
+                    };
+                    after_ret = br1_ret && br2_ret;
+                }
+                While(cond_expr, body_bl) => {
+                    // todo (optional) check if cond is just true or false
+                    self.check_expression_check_type(&cond_expr, &InnerType::Bool, &cur_env)
+                        .accumulate_errors_in(&mut errors);
+                    match self.enter_block(fun, &body_bl, &cur_env) {
+                        Ok(does_ret) => after_ret = does_ret,
+                        Err(err) => errors.extend(err),
+                    }
+                }
+                Expr(subexpr) => match self.check_expression_get_type(&subexpr, &cur_env) {
+                    Ok(_) => (),
+                    Err(err) => errors.extend(err),
+                },
                 Error => unreachable!(),
                 _ => errors.push(FrontendError {
+                    // todo for each
                     err: "Error: not all statements are supported so far".to_string(),
                     span: st.span,
                 }),
             }
         }
 
-        ok_if_no_error(errors)
+        if errors.is_empty() {
+            Ok(after_ret)
+        } else {
+            Err(errors)
+        }
+    }
+
+    fn check_if_lvalue(&self, expr: &'a Expr) -> FrontendResult<()> {
+        use self::InnerExpr::*;
+        // todo arrays have only "length" field, and it is read-only!
+        match &expr.inner {
+            LitVar(_) | ArrayElem { .. } | ObjField { .. } => Ok(()),
+            _ => Err(vec![FrontendError{
+                err:"Error: required an l-value (options: variable <var>, array elem <expr>[index], or object field <obj>.<field>)".to_string(),
+                span:expr.span
+            }]),
+        }
     }
 
     fn check_expression_check_type(
         &self,
         expr: &'a Expr,
         expected_expr_type: &'a InnerType,
-        cur_env: &VarEnv<'a>,
+        cur_env: &Env<'a>,
     ) -> FrontendResult<()> {
         let expr_type = self.check_expression_get_type(expr, cur_env)?;
         // todo, potentially gctx doesn't know span for error
@@ -145,7 +255,7 @@ impl<'a> FunctionContext<'a> {
     fn check_expression_get_type(
         &self,
         expr: &'a Expr,
-        cur_env: &VarEnv<'a>,
+        cur_env: &Env<'a>,
     ) -> FrontendResult<InnerType> {
         let mut errors = vec![];
 

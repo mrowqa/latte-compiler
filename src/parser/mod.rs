@@ -2,7 +2,9 @@ lalrpop_mod!(#[allow(clippy::all)] pub latte, "/parser/latte.rs");
 use self::latte::ProgramParser;
 use codemap::CodeMap;
 use frontend_error::{FrontendError, FrontendResult};
-use model::ast::{new_spanned_boxed, BinaryOp, Expr, InnerExpr, InnerUnaryOp, Program};
+use model::ast::{
+    new_spanned_boxed, BinaryOp, Block, Expr, InnerExpr, InnerStmt, InnerUnaryOp, Program, Stmt,
+};
 
 const KEYWORDS: &[&str] = &[
     "if", "else", "return", "while", "for", "new", "class", "extends", "true", "false", "null",
@@ -166,6 +168,18 @@ fn return_or_fail(
                 span: (l, r),
             });
             new_spanned_boxed(l, InnerExpr::LitNull, r)
+        }
+    }
+}
+
+fn stmt_to_block(stmt: Box<Stmt>) -> Block {
+    if let InnerStmt::Block(bl) = stmt.inner {
+        bl
+    } else {
+        let span = stmt.span;
+        Block {
+            stmts: vec![stmt],
+            span,
         }
     }
 }

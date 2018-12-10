@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use model::ast::*;
 use frontend_error::FrontendError;
-use super::{KEYWORDS, optimize_const_expr_shallow, return_or_fail};
+use super::{KEYWORDS, optimize_const_expr_shallow, return_or_fail, stmt_to_block};
 
 // (optional) todo tests (reformating code + check if got what expected)
 grammar<'err>(errors: &'err mut Vec<FrontendError>);
@@ -127,26 +127,30 @@ StmtRestr<I>: Box<Stmt> = {
     // dangling if solution explained above
     <l:@L> "if" "(" <c:Expr> ")" <s1:StmtRestr<"I">> if I != "" => {
         let (l, r) = (l, s1.span.1);
-        let s = InnerStmt::Cond{cond: c, true_branch: s1, false_branch: None};
+        let s = InnerStmt::Cond{cond: c, true_branch: stmt_to_block(s1), false_branch: None};
         new_spanned_boxed(l, s, r)
     },
     <l:@L> "if" "(" <c:Expr> ")" <s1:StmtRestr<"">> "else" <s2:StmtRestr<I>> => {
         let (l, r) = (l, s2.span.1);
-        let s = InnerStmt::Cond{cond: c, true_branch: s1, false_branch: Some(s2)};
+        let s = InnerStmt::Cond {
+            cond: c,
+            true_branch: stmt_to_block(s1),
+            false_branch: Some(stmt_to_block(s2)),
+        };
         new_spanned_boxed(l, s, r)
     },
     <l:@L> "while" "(" <c:Expr> ")" <st:StmtRestr<I>> => {
         let (l, r) = (l, st.span.1);
-        let s = InnerStmt::While(c, st);
+        let s = InnerStmt::While(c, stmt_to_block(st));
         new_spanned_boxed(l, s, r)
     },
     <l:@L> "for" "(" <t:Type> <id:Ident> ":" <e:Expr> ")" <s:StmtRestr<I>> => {
         let (l, r) = (l, s.span.1);
-        let s = InnerStmt::ForEach{
+        let s = InnerStmt::ForEach {
             iter_type: t,
             iter_name: id,
             array: e,
-            body: s,
+            body: stmt_to_block(s),
         };
         new_spanned_boxed(l, s, r)
     },
