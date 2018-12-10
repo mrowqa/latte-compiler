@@ -13,12 +13,13 @@ pub struct ClassDesc<'a> {
     items: HashMap<&'a str, TypeWrapper<'a>>,
 }
 
-enum TypeWrapper<'a> {
+pub enum TypeWrapper<'a> {
     Var(&'a Type),
     Fun(FunDesc<'a>),
 }
 
 pub struct FunDesc<'a> {
+    // todo (optional) use getters instead of pub fields?
     pub ret_type: &'a Type,
     pub name: &'a str,
     pub args_types: Vec<&'a Type>,
@@ -51,6 +52,10 @@ impl<'a> GlobalContext<'a> {
 
     pub fn get_class_description(&self, cl_name: &str) -> Option<&ClassDesc<'a>> {
         self.classes.get(cl_name)
+    }
+
+    pub fn get_function_description(&self, fun_name: &str) -> Option<&FunDesc<'a>> {
+        self.functions.get(fun_name)
     }
 
     fn scan_global_defenitions(&mut self, prog: &'a Program) -> FrontendResult<()> {
@@ -179,10 +184,19 @@ impl<'a> GlobalContext<'a> {
 
     pub fn check_types_compatibility(
         &self,
-        _lhs: &'a InnerType,
-        _rhs: &'a InnerType,
+        lhs: &'a InnerType,
+        rhs: &'a InnerType,
+        span: Span,
     ) -> FrontendResult<()> {
-        Ok(()) // todo, nulls, class hierarchy
+        // todo (ext) allow the following:
+        // lhs=array/obj, rhs=null
+        // lhs=superclass, rhs=subclass
+        if lhs == rhs {
+            Ok(())
+        } else {
+            let err = format!("Error: expected type {}, got type {}", lhs, rhs);
+            Err(vec![FrontendError { err, span }])
+        }
     }
 }
 
@@ -228,9 +242,9 @@ impl<'a> ClassDesc<'a> {
     }
 
     pub fn check_types(&self, ctx: &GlobalContext<'a>) -> FrontendResult<()> {
-        // todo check if proper method signature when overriding method
-        // todo some helper method for looking up methods in superclasses
-        // todo handle properly fields vs methods while inheriting them
+        // todo (ext) check if proper method signature when overriding method
+        // todo (ext) some helper method for looking up methods in superclasses
+        // todo (ext) handle properly fields vs methods while inheriting them
         let mut errors = vec![];
         if let Some(t) = self.parent_type {
             ctx.check_superclass_type(t, self.name)
@@ -248,6 +262,10 @@ impl<'a> ClassDesc<'a> {
         }
 
         ok_if_no_error(errors)
+    }
+
+    pub fn get_item(&self, name: &str) -> Option<&TypeWrapper<'a>> {
+        self.items.get(name)
     }
 }
 

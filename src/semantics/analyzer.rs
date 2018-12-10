@@ -1,6 +1,6 @@
 use super::function::FunctionContext;
 use super::global_context::GlobalContext;
-use frontend_error::{ok_if_no_error, ErrorAccumulation, FrontendResult};
+use frontend_error::{ok_if_no_error, ErrorAccumulation, FrontendError, FrontendResult};
 use model::ast::*;
 
 pub struct SemanticAnalyzer<'a> {
@@ -17,10 +17,9 @@ impl<'a> SemanticAnalyzer<'a> {
     }
 
     pub fn perform_full_analysis(&mut self) -> FrontendResult<()> {
-        // todo put somewhere check for main() signature
         self.calculate_global_context()?;
         self.analyze_functions()?;
-        Ok(())
+        self.check_main_signature()
     }
 
     fn calculate_global_context(&mut self) -> FrontendResult<()> {
@@ -69,5 +68,26 @@ impl<'a> SemanticAnalyzer<'a> {
         }
 
         ok_if_no_error(errors)
+    }
+
+    fn check_main_signature(&mut self) -> FrontendResult<()> {
+        let err_msg = "Global analysis succeeded before function body analysis";
+        let gctx = self.ctx.as_ref().expect(err_msg);
+        match gctx.get_function_description("main") {
+            Some(f) => {
+                if f.ret_type.inner == InnerType::Int && f.args_types.is_empty() {
+                    Ok(())
+                } else {
+                    Err(vec![FrontendError {
+                    err: "Error: main function has invalid signature, it must return int and take no arguments".to_string(),
+                    span: (0, 0), // we could have correct span here, though
+                }])
+                }
+            }
+            None => Err(vec![FrontendError {
+                err: "Error: main function not found".to_string(),
+                span: (0, 0),
+            }]),
+        }
     }
 }

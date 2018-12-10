@@ -3,10 +3,11 @@ extern crate latte_compiler;
 use latte_compiler::compile;
 
 fn main() {
+    // todo run on actual file
     let res = compile(
         "input",
         r#"
-int main() {
+int main(int arg) {
     return 0;
 }
 

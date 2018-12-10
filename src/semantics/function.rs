@@ -1,10 +1,9 @@
-use super::global_context::{ClassDesc, FunDesc, GlobalContext};
+use super::global_context::{ClassDesc, FunDesc, GlobalContext, TypeWrapper};
 use frontend_error::{ok_if_no_error, ErrorAccumulation, FrontendError, FrontendResult};
 use model::ast::*;
 use std::collections::HashMap;
 
 pub struct FunctionContext<'a> {
-    #[allow(dead_code)] // todo remove
     class_ctx: Option<&'a ClassDesc<'a>>,
     global_ctx: &'a GlobalContext<'a>,
 }
@@ -12,7 +11,6 @@ pub struct FunctionContext<'a> {
 enum Env<'a> {
     Root(&'a FunctionContext<'a>),
     Nested {
-        #[allow(dead_code)] // todo remove
         parent: &'a Env<'a>,
         locals: HashMap<&'a str, &'a Type>,
     },
@@ -46,12 +44,71 @@ impl<'a> Env<'a> {
         }
     }
 
-    pub fn get_variable(&self, _name: &str) -> FrontendResult<InnerType> {
-        Err(vec![]) // todo
+    pub fn get_variable(&self, name: &str, span: Span) -> FrontendResult<InnerType> {
+        match self {
+            Env::Root(ctx) => {
+                let mut err_msg = None;
+                if let Some(cctx) = ctx.class_ctx {
+                    match cctx.get_item(name) {
+                        Some(TypeWrapper::Var(t)) => return Ok(t.inner.clone()),
+                        Some(TypeWrapper::Fun(_)) => {
+                            err_msg = Some("Error: expected variable, found a class method")
+                        }
+                        None => (),
+                    }
+                }
+                let err_msg = match err_msg {
+                    Some(e) => e,
+                    None => match ctx.global_ctx.get_function_description(name) {
+                        Some(_) => "Error: expected variable, found a function",
+                        None => "Error: variable not defined",
+                    },
+                };
+                Err(vec![FrontendError {
+                    err: err_msg.to_string(),
+                    span,
+                }])
+            }
+            Env::Nested { locals, parent } => match locals.get(name) {
+                Some(t) => Ok(t.inner.clone()),
+                None => parent.get_variable(name, span),
+            },
+        }
     }
 
-    pub fn get_function(&self, _name: &str) -> FrontendResult<&'a FunDesc<'a>> {
-        Err(vec![]) // todo
+    pub fn get_function(&self, name: &str, span: Span) -> FrontendResult<&'a FunDesc<'a>> {
+        match self {
+            Env::Root(ctx) => {
+                let mut err_msg = None;
+                if let Some(cctx) = ctx.class_ctx {
+                    match cctx.get_item(name) {
+                        Some(TypeWrapper::Fun(f)) => return Ok(f),
+                        Some(TypeWrapper::Var(_)) => {
+                            err_msg = Some("Error: expected function, found a class field")
+                        }
+                        None => (),
+                    }
+                }
+                let err_msg = match err_msg {
+                    Some(e) => e,
+                    None => match ctx.global_ctx.get_function_description(name) {
+                        Some(f) => return Ok(f),
+                        None => "Error: function not defined",
+                    },
+                };
+                Err(vec![FrontendError {
+                    err: err_msg.to_string(),
+                    span,
+                }])
+            }
+            Env::Nested { locals, parent } => match locals.get(name) {
+                Some(_) => Err(vec![FrontendError {
+                    err: "Error: expected function, got a variable".to_string(),
+                    span,
+                }]),
+                None => parent.get_function(name, span),
+            },
+        }
     }
 }
 
@@ -64,7 +121,6 @@ impl<'a> FunctionContext<'a> {
     }
 
     pub fn analyze_function(&self, fun: &'a FunDef) -> FrontendResult<()> {
-        // todo support class context
         let mut errors = vec![];
         let root = Env::new_root(&self);
         let mut params_env = Env::new_nested(&root);
@@ -214,7 +270,7 @@ impl<'a> FunctionContext<'a> {
                 },
                 Error => unreachable!(),
                 _ => errors.push(FrontendError {
-                    // todo for each
+                    // todo (ext) for each
                     err: "Error: not all statements are supported so far".to_string(),
                     span: st.span,
                 }),
@@ -230,7 +286,7 @@ impl<'a> FunctionContext<'a> {
 
     fn check_if_lvalue(&self, expr: &'a Expr) -> FrontendResult<()> {
         use self::InnerExpr::*;
-        // todo arrays have only "length" field, and it is read-only!
+        // todo (ext) arrays have only "length" field, and it is read-only!
         match &expr.inner {
             LitVar(_) | ArrayElem { .. } | ObjField { .. } => Ok(()),
             _ => Err(vec![FrontendError{
@@ -247,9 +303,8 @@ impl<'a> FunctionContext<'a> {
         cur_env: &Env<'a>,
     ) -> FrontendResult<()> {
         let expr_type = self.check_expression_get_type(expr, cur_env)?;
-        // todo, potentially gctx doesn't know span for error
         self.global_ctx
-            .check_types_compatibility(expected_expr_type, &expr_type)
+            .check_types_compatibility(expected_expr_type, &expr_type, expr.span)
     }
 
     fn check_expression_get_type(
@@ -264,7 +319,7 @@ impl<'a> FunctionContext<'a> {
         use self::InnerType::*;
         use self::InnerUnaryOp::*;
         match &expr.inner {
-            LitVar(var) => cur_env.get_variable(&var),
+            LitVar(var) => cur_env.get_variable(&var, expr.span),
             LitInt(_) => Ok(Int),
             LitBool(_) => Ok(Bool),
             LitStr(_) => Ok(String),
@@ -273,7 +328,8 @@ impl<'a> FunctionContext<'a> {
                 function_name,
                 args,
             } => {
-                let fun_desc = cur_env.get_function(function_name.inner.as_ref())?;
+                let fun_desc =
+                    cur_env.get_function(function_name.inner.as_ref(), function_name.span)?;
                 let expected_args_no = fun_desc.args_types.len();
                 let got_args_no = args.len();
                 if expected_args_no != got_args_no {
@@ -337,10 +393,12 @@ impl<'a> FunctionContext<'a> {
                         (Int, EQ, Int) => Ok(Bool),
                         (Bool, EQ, Bool) => Ok(Bool),
                         (String, EQ, String) => Ok(Bool),
+                        // todo (ext) support comparing arrays and objects with null
                         (_, EQ, _) => fail_with("==", "two operands of same type: integer, boolean or string"),
                         (Int, NE, Int) => Ok(Bool),
                         (Bool, NE, Bool) => Ok(Bool),
                         (String, NE, String) => Ok(Bool),
+                        // todo (ext) support comparing arrays and objects with null
                         (_, NE, _) => fail_with("!=", "two operands of same type: integer, boolean or string"),
                     },
                     (Ok(_), err @ Err(_)) => err,
@@ -369,7 +427,7 @@ impl<'a> FunctionContext<'a> {
                 }
             }
             _ => Err(vec![FrontendError {
-                // todo support extensions
+                // todo (ext) support extensions
                 err: "Error: extensions not supported so far".to_string(),
                 span: expr.span,
             }]),

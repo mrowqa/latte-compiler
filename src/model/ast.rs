@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug)]
 pub struct Program {
     pub defs: Vec<TopDef>,
@@ -46,7 +48,7 @@ pub struct Block {
 
 #[derive(Debug)]
 pub struct ItemWithSpan<T> {
-    // todo (rename to Node<T>)
+    // todo (optional) rename to Node<T>
     pub inner: T,
     pub span: Span,
 }
@@ -159,4 +161,22 @@ pub enum BinaryOp {
     GE,
     EQ,
     NE,
+}
+
+impl fmt::Display for InnerType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::InnerType::*;
+        match self {
+            Int => write!(f, "int"),
+            Bool => write!(f, "boolean"),
+            String => write!(f, "string"),
+            Array(subtype) => {
+                subtype.fmt(f)?;
+                write!(f, "[]")
+            }
+            Class(name) => write!(f, "{}", name),
+            Null => write!(f, "null"),
+            Void => write!(f, "void"),
+        }
+    }
 }
