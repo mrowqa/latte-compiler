@@ -46,7 +46,7 @@ impl<'a> Env<'a> {
 
     pub fn get_variable(
         &self,
-        global_ctx: &GlobalContext<'a>,
+        global_ctx: &GlobalContext<'a>, // todo (optional) theoretically, can get it from Root(_) or also have it in Nested
         name: &str,
         span: Span,
     ) -> FrontendResult<InnerType> {
@@ -83,7 +83,7 @@ impl<'a> Env<'a> {
 
     pub fn get_function(
         &self,
-        global_ctx: &'a GlobalContext<'a>,
+        global_ctx: &'a GlobalContext<'a>, // todo (optional) theoretically, can get it from Root(_) or also have it in Nested
         name: &str,
         span: Span,
     ) -> FrontendResult<&'a FunDesc<'a>> {
