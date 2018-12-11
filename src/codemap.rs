@@ -80,8 +80,8 @@ impl<'a> CodeMap<'a> {
                     writeln!(
                         &mut result,
                         "{}{}{}",
-                        err_fmt("\\-"),
-                        err_fmt(&"-".repeat(col1 - 1)),
+                        err_fmt("\\"),
+                        err_fmt(&"-".repeat(col1)),
                         err_fmt("^")
                     )
                     .unwrap();

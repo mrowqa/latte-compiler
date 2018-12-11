@@ -245,9 +245,12 @@ impl<'a> FunctionContext<'a> {
                     true_branch,
                     false_branch,
                 } => {
-                    // todo (optional) check if cond is just true or false
                     self.check_expression_check_type(&cond, &InnerType::Bool, &cur_env)
                         .accumulate_errors_in(&mut errors);
+                    let cond_state = match &cond.inner {
+                        InnerExpr::LitBool(cond_val) => Some(cond_val),
+                        _ => None,
+                    };
                     let br1_ret = match self.enter_block(fun, &true_branch, &cur_env) {
                         Ok(does_ret) => does_ret,
                         Err(err) => {
@@ -263,18 +266,25 @@ impl<'a> FunctionContext<'a> {
                                 false
                             }
                         },
-                        None => true,
+                        None => false,
                     };
-                    after_ret = br1_ret && br2_ret;
+                    after_ret = match cond_state {
+                        Some(true) => br1_ret,
+                        Some(false) => br2_ret,
+                        None => br1_ret && br2_ret,
+                    };
                 }
                 While(cond_expr, body_bl) => {
-                    // todo (optional) check if cond is just true or false
                     self.check_expression_check_type(&cond_expr, &InnerType::Bool, &cur_env)
                         .accumulate_errors_in(&mut errors);
                     match self.enter_block(fun, &body_bl, &cur_env) {
                         Ok(does_ret) => after_ret = does_ret,
                         Err(err) => errors.extend(err),
-                    }
+                    };
+                    match &cond_expr.inner {
+                        InnerExpr::LitBool(false) => after_ret = false,
+                        _ => (),
+                    };
                 }
                 ForEach {
                     iter_type,
