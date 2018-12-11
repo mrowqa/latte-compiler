@@ -267,21 +267,62 @@ impl<'a> ClassDesc<'a> {
     }
 
     pub fn check_types(&self, ctx: &GlobalContext<'a>) -> FrontendResult<()> {
-        // todo (ext) check if proper method signature when overriding method
-        // todo (ext) some helper method for looking up methods in superclasses
-        // todo (ext) handle properly fields vs methods while inheriting them
         let mut errors = vec![];
-        if let Some(t) = self.parent_type {
-            ctx.check_superclass_type(t, self.name)
-                .accumulate_errors_in(&mut errors);
-        }
-        for t in self.items.values() {
+        let parent_desc = match self.parent_type {
+            Some(t) => {
+                ctx.check_superclass_type(t, self.name)
+                    .accumulate_errors_in(&mut errors);
+                match (errors.is_empty(), &t.inner) {
+                    (true, InnerType::Class(parent_name)) => ctx.get_class_description(parent_name),
+                    _ => None,
+                }
+            }
+            None => None,
+        };
+        for (name, t) in self.items.iter() {
+            let t_in_parent = match parent_desc {
+                Some(p_desc) => p_desc.get_item(ctx, name),
+                None => None,
+            };
             match t {
-                TypeWrapper::Var(var_type) => ctx
-                    .check_local_var_type(var_type)
-                    .accumulate_errors_in(&mut errors),
+                TypeWrapper::Var(var_type) => {
+                    ctx.check_local_var_type(var_type)
+                        .accumulate_errors_in(&mut errors);
+                    if let Some(_) = t_in_parent {
+                        errors.push(FrontendError {
+                            err: format!(
+                                "Error: field or method named '{}' already defined in superclass",
+                                name
+                            ),
+                            // todo (optional) remember span for the name
+                            span: var_type.span,
+                        })
+                    }
+                }
                 TypeWrapper::Fun(fun_desc) => {
-                    fun_desc.check_types(ctx).accumulate_errors_in(&mut errors)
+                    fun_desc.check_types(ctx).accumulate_errors_in(&mut errors);
+                    match t_in_parent {
+                        Some(TypeWrapper::Var(_)) => {
+                            errors.push(FrontendError {
+                                err: format!(
+                                    "Error: field named '{}' already defined in superclass",
+                                    name
+                                ),
+                                // todo (optional) remember span for the name
+                                span: fun_desc.ret_type.span,
+                            })
+                        }
+                        Some(TypeWrapper::Fun(parent_fun)) => {
+                            if !fun_desc.does_signature_match(&parent_fun) {
+                                errors.push(FrontendError {
+                                    err: "Error: method signature does not match method defined in superclass".to_string(),
+                                    // todo (optional) remember span for the name
+                                    span: fun_desc.ret_type.span,
+                                })
+                            }
+                        }
+                        None => (),
+                    }
                 }
             }
         }
@@ -289,8 +330,27 @@ impl<'a> ClassDesc<'a> {
         ok_if_no_error(errors)
     }
 
-    pub fn get_item(&self, name: &str) -> Option<&TypeWrapper<'a>> {
-        self.items.get(name)
+    pub fn get_item(
+        &self,
+        global_ctx: &'a GlobalContext<'a>,
+        name: &str,
+    ) -> Option<&TypeWrapper<'a>> {
+        match self.items.get(name) {
+            Some(it) => Some(it),
+            None => match &self.parent_type {
+                Some(parent_type) => {
+                    let parent_name = match &parent_type.inner {
+                        InnerType::Class(n) => n,
+                        _ => unreachable!(), // assumption: tree made by our parser
+                    };
+                    let cl_desc = global_ctx
+                        .get_class_description(parent_name)
+                        .expect("assumption: tree made by our parser");
+                    cl_desc.get_item(global_ctx, name)
+                }
+                None => None,
+            },
+        }
     }
 }
 
@@ -313,6 +373,23 @@ impl<'a> FunDesc<'a> {
         }
 
         ok_if_no_error(errors)
+    }
+
+    pub fn does_signature_match(&self, rhs: &FunDesc<'_>) -> bool {
+        if self.ret_type.inner != rhs.ret_type.inner
+            || self.name != rhs.name
+            || self.args_types.len() != rhs.args_types.len()
+        {
+            return false;
+        }
+
+        for (l, r) in self.args_types.iter().zip(rhs.args_types.iter()) {
+            if l.inner != r.inner {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
