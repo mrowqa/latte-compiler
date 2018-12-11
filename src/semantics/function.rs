@@ -282,7 +282,9 @@ impl<'a> FunctionContext<'a> {
                         Err(err) => errors.extend(err),
                     };
                     match &cond_expr.inner {
-                        InnerExpr::LitBool(false) => after_ret = false,
+                        // while (true) just loops, so we don't have to check if we return after it
+                        // while (false) just need to be skipped,
+                        InnerExpr::LitBool(ret) => after_ret = *ret,
                         _ => (),
                     };
                 }
