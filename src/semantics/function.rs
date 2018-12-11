@@ -198,7 +198,8 @@ impl<'a> FunctionContext<'a> {
                 }
                 Assign(lhs, rhs) => {
                     // todo (optional) can check both sides of '=' for more errors
-                    self.check_if_lvalue(&lhs).accumulate_errors_in(&mut errors);
+                    self.check_if_lvalue(&lhs, &cur_env)
+                        .accumulate_errors_in(&mut errors);
                     match self.check_expression_get_type(&lhs, &cur_env) {
                         Ok(t) => self
                             .check_expression_check_type(&rhs, &t, &cur_env)
@@ -207,7 +208,8 @@ impl<'a> FunctionContext<'a> {
                     }
                 }
                 Incr(e) | Decr(e) => {
-                    self.check_if_lvalue(&e).accumulate_errors_in(&mut errors);
+                    self.check_if_lvalue(&e, &cur_env)
+                        .accumulate_errors_in(&mut errors);
                     self.check_expression_check_type(&e, &InnerType::Int, &cur_env)
                         .accumulate_errors_in(&mut errors);
                 }
@@ -307,14 +309,21 @@ impl<'a> FunctionContext<'a> {
         }
     }
 
-    fn check_if_lvalue(&self, expr: &'a Expr) -> FrontendResult<()> {
+    fn check_if_lvalue(&self, expr: &'a Expr, cur_env: &Env<'a>) -> FrontendResult<()> {
         use self::InnerExpr::*;
-        // todo (ext) arrays have only "length" field, and it is read-only!
         match &expr.inner {
-            LitVar(_) | ArrayElem { .. } | ObjField { .. } => Ok(()),
-            _ => Err(vec![FrontendError{
-                err:"Error: required an l-value (options: variable <var>, array elem <expr>[index], or object field <obj>.<field>)".to_string(),
-                span:expr.span
+            LitVar(_) | ArrayElem { .. } => Ok(()),
+            ObjField { obj, .. } => match self.check_expression_get_type(obj, cur_env) {
+                Ok(InnerType::Class(_)) => Ok(()),
+                Ok(_) => Err(vec![FrontendError {
+                    err: "Error: only class objects have mutable fields".to_string(),
+                    span: expr.span
+                }]),
+                Err(_) => Err(vec![]), // it's caller responsibility to check that
+            },
+            _ => Err(vec![FrontendError {
+                err: "Error: required an l-value (options: variable <var>, array elem <expr>[index], or object field <obj>.<field>)".to_string(),
+                span: expr.span,
             }]),
         }
     }
@@ -335,7 +344,35 @@ impl<'a> FunctionContext<'a> {
         expr: &'a Expr,
         cur_env: &Env<'a>,
     ) -> FrontendResult<InnerType> {
-        let mut errors = vec![];
+        let front_err = |err| {
+            Err(vec![FrontendError {
+                err,
+                span: expr.span,
+            }])
+        };
+
+        let validate_fun_call = |fun_desc: &FunDesc<'a>, args: &Vec<Box<Expr>>| {
+            let mut errors = vec![];
+            let expected_args_no = fun_desc.args_types.len();
+            let got_args_no = args.len();
+            if expected_args_no != got_args_no {
+                front_err(format!(
+                    "Error: expected {} argument(s), got {}.",
+                    expected_args_no, got_args_no
+                ))
+            } else {
+                for (t, a) in fun_desc.args_types.iter().zip(args) {
+                    self.check_expression_check_type(&a, &t.inner, &cur_env)
+                        .accumulate_errors_in(&mut errors);
+                }
+
+                if errors.is_empty() {
+                    Ok(fun_desc.ret_type.inner.clone())
+                } else {
+                    Err(errors)
+                }
+            }
+        };
 
         use self::BinaryOp::*;
         use self::InnerExpr::*;
@@ -353,38 +390,14 @@ impl<'a> FunctionContext<'a> {
             } => {
                 let fun_desc =
                     cur_env.get_function(function_name.inner.as_ref(), function_name.span)?;
-                let expected_args_no = fun_desc.args_types.len();
-                let got_args_no = args.len();
-                if expected_args_no != got_args_no {
-                    Err(vec![FrontendError {
-                        err: format!(
-                            "Error: expected {} argument(s), got {}.",
-                            expected_args_no, got_args_no
-                        ),
-                        span: expr.span,
-                    }])
-                } else {
-                    for (t, a) in fun_desc.args_types.iter().zip(args) {
-                        self.check_expression_check_type(&a, &t.inner, &cur_env)
-                            .accumulate_errors_in(&mut errors);
-                    }
-
-                    if errors.is_empty() {
-                        Ok(fun_desc.ret_type.inner.clone())
-                    } else {
-                        Err(errors)
-                    }
-                }
+                validate_fun_call(&fun_desc, &args)
             }
             BinaryOp(lhs, op, rhs) => {
                 let fail_with = |op_str: &str, args: &str| {
-                    Err(vec![FrontendError {
-                        err: format!(
-                            "Error: binary operator '{}' can be applied only to {}",
-                            op_str, args
-                        ),
-                        span: expr.span,
-                    }])
+                    front_err(format!(
+                        "Error: binary operator '{}' can be applied only to {}",
+                        op_str, args
+                    ))
                 };
                 let lhs_res = self.check_expression_get_type(lhs, &cur_env);
                 let rhs_res = self.check_expression_get_type(rhs, &cur_env);
@@ -430,23 +443,116 @@ impl<'a> FunctionContext<'a> {
                 match (&op.inner, t) {
                     (IntNeg, Int) => Ok(Int),
                     (BoolNeg, Bool) => Ok(Bool),
-                    (IntNeg, _) => Err(vec![FrontendError {
-                        err: "Error: unary operator '-' can be applied only to integer expressions"
+                    (IntNeg, _) => front_err(
+                        "Error: unary operator '-' can be applied only to integer expressions"
                             .to_string(),
-                        span: expr.span,
-                    }]),
-                    (BoolNeg, _) => Err(vec![FrontendError {
-                        err: "Error: unary operator '!' can be applied only to boolean expressions"
+                    ),
+                    (BoolNeg, _) => front_err(
+                        "Error: unary operator '!' can be applied only to boolean expressions"
                             .to_string(),
-                        span: expr.span,
-                    }]),
+                    ),
                 }
             }
-            _ => Err(vec![FrontendError {
-                // todo (ext) support extensions
-                err: "Error: extensions not supported so far".to_string(),
-                span: expr.span,
-            }]),
+            NewArray {
+                elem_type,
+                elem_cnt,
+            } => {
+                let type_ok = self.global_ctx.check_local_var_type(&elem_type);
+                let cnt_ok = self.check_expression_check_type(&elem_cnt, &Int, &cur_env);
+                match (type_ok, cnt_ok) {
+                    (Ok(()), Ok(())) => Ok(Array(Box::new(elem_type.inner.clone()))),
+                    (Ok(_), Err(err)) => Err(err),
+                    (Err(err), Ok(_)) => Err(err),
+                    (Err(mut err1), Err(err2)) => {
+                        err1.extend(err2);
+                        Err(err1)
+                    }
+                }
+            }
+            ArrayElem { array, index } => {
+                let mut errors = vec![];
+                self.check_expression_check_type(&index, &Int, &cur_env)
+                    .accumulate_errors_in(&mut errors);
+                let res = match self.check_expression_get_type(&array, &cur_env) {
+                    Ok(Array(t)) => Some(t),
+                    Ok(_) => {
+                        errors.push(FrontendError {
+                            err: "Error: only arrays can be indexed".to_string(),
+                            span: expr.span,
+                        });
+                        None
+                    }
+                    Err(err) => {
+                        errors.extend(err);
+                        None
+                    }
+                };
+                if let (Some(t), true) = (res, errors.is_empty()) {
+                    Ok(*t)
+                } else {
+                    Err(errors)
+                }
+            }
+            NewObject(obj_type) => {
+                self.global_ctx.check_local_var_type(&obj_type)?;
+                if let Class(_) = obj_type.inner {
+                    Ok(obj_type.inner.clone())
+                } else {
+                    front_err("Error: you can use new only with class and array types".to_string())
+                }
+            }
+            ObjField { obj, field } => match self.check_expression_get_type(&obj, &cur_env) {
+                Ok(Class(cl_name)) => {
+                    let desc = self
+                        .global_ctx
+                        .get_class_description(&cl_name)
+                        .expect("check_expression_get_type returns correct types");
+                    match desc.get_item(&field.inner) {
+                        Some(TypeWrapper::Var(t)) => Ok(t.inner.clone()),
+                        Some(TypeWrapper::Fun(_)) => {
+                            front_err(format!("Error: {} is a method, not a field", field.inner))
+                        }
+                        None => front_err(format!(
+                            "Error: {} is not defined for class {}",
+                            field.inner, cl_name
+                        )),
+                    }
+                }
+                Ok(Array(_)) => {
+                    if field.inner == "length" {
+                        Ok(Int)
+                    } else {
+                        front_err("Error: array's only field is length".to_string())
+                    }
+                }
+                Ok(_) => front_err("Error: only classes and arrays have fields".to_string()),
+                Err(err) => Err(err),
+            },
+            ObjMethodCall {
+                obj,
+                method_name,
+                args,
+            } => match self.check_expression_get_type(&obj, &cur_env) {
+                Ok(Class(cl_name)) => {
+                    let desc = self
+                        .global_ctx
+                        .get_class_description(&cl_name)
+                        .expect("check_expression_get_type returns correct types");
+                    match desc.get_item(&method_name.inner) {
+                        Some(TypeWrapper::Fun(fun_desc)) => validate_fun_call(&fun_desc, &args),
+                        Some(TypeWrapper::Var(_)) => front_err(format!(
+                            "Error: {} is a field, not a method",
+                            method_name.inner
+                        )),
+                        None => front_err(format!(
+                            "Error: {} is not defined for class {}",
+                            method_name.inner, cl_name
+                        )),
+                    }
+                }
+                Ok(_) => front_err("Error: only classes have methods".to_string()),
+                Err(err) => Err(err),
+            },
         }
     }
 }
