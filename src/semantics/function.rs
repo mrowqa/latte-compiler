@@ -264,16 +264,39 @@ impl<'a> FunctionContext<'a> {
                         Err(err) => errors.extend(err),
                     }
                 }
+                ForEach {
+                    iter_type,
+                    iter_name,
+                    array,
+                    body,
+                } => {
+                    let mut new_env = Env::new_nested(&cur_env);
+                    match self.global_ctx.check_local_var_type(&iter_type) {
+                        Ok(()) => {
+                            new_env
+                                .add_variable(&iter_type, &iter_name)
+                                .accumulate_errors_in(&mut errors);
+
+                            self.check_expression_check_type(
+                                &array,
+                                &InnerType::Array(Box::new(iter_type.inner.clone())),
+                                &cur_env,
+                            )
+                            .accumulate_errors_in(&mut errors)
+                        }
+                        Err(err) => errors.extend(err),
+                    }
+
+                    match self.enter_block(fun, body, &new_env) {
+                        Ok(does_ret) => after_ret = does_ret,
+                        Err(err) => errors.extend(err),
+                    }
+                }
                 Expr(subexpr) => match self.check_expression_get_type(&subexpr, &cur_env) {
                     Ok(_) => (),
                     Err(err) => errors.extend(err),
                 },
                 Error => unreachable!(),
-                _ => errors.push(FrontendError {
-                    // todo (ext) for each
-                    err: "Error: not all statements are supported so far".to_string(),
-                    span: st.span,
-                }),
             }
         }
 
@@ -354,7 +377,7 @@ impl<'a> FunctionContext<'a> {
                 }
             }
             BinaryOp(lhs, op, rhs) => {
-                let mut fail_with = |op_str: &str, args: &str| {
+                let fail_with = |op_str: &str, args: &str| {
                     Err(vec![FrontendError {
                         err: format!(
                             "Error: binary operator '{}' can be applied only to {}",
@@ -367,39 +390,32 @@ impl<'a> FunctionContext<'a> {
                 let rhs_res = self.check_expression_get_type(rhs, &cur_env);
                 match (lhs_res, rhs_res) {
                     (Ok(lhs_t), Ok(rhs_t)) => match (lhs_t, op, rhs_t) {
-                        (Bool, And, Bool) => Ok(Bool),
+                        (Bool, And, Bool) | (Bool, Or, Bool) => Ok(Bool),
                         (_, And, _) => fail_with("&&", "boolean expressions"),
-                        (Bool, Or, Bool) => Ok(Bool),
                         (_, Or, _) => fail_with("||", "boolean expressions"),
                         (String, Add, String) => Ok(String),
-                        (Int, Add, Int) => Ok(Int),
+                        (Int, Add, Int) | (Int, Sub, Int)
+                        | (Int, Mul, Int) | (Int, Div, Int) | (Int, Mod, Int) => Ok(Int),
                         (_, Add, _) => fail_with("+", "two integer expressions (sum) or two string expressions (concatenation)"),
-                        (Int, Sub, Int) => Ok(Int),
                         (_, Sub, _) => fail_with("-", "integer expressions"),
-                        (Int, Mul, Int) => Ok(Int),
                         (_, Mul, _) => fail_with("*", "integer expressions"),
-                        (Int, Div, Int) => Ok(Int),
                         (_, Div, _) => fail_with("/", "integer expressions"),
-                        (Int, Mod, Int) => Ok(Int),
                         (_, Mod, _) => fail_with("%", "integer expressions"),
-                        (Int, LT, Int) => Ok(Bool),
+                        (Int, LT, Int) | (Int, LE, Int)
+                        | (Int, GT, Int) | (Int, GE, Int)
+                        | (Int, EQ, Int) | (Int, NE, Int) => Ok(Bool),
                         (_, LT, _) => fail_with("<", "integer expressions"),
-                        (Int, LE, Int) => Ok(Bool),
                         (_, LE, _) => fail_with("<=", "integer expressions"),
-                        (Int, GT, Int) => Ok(Bool),
                         (_, GT, _) => fail_with(">", "integer expressions"),
-                        (Int, GE, Int) => Ok(Bool),
                         (_, GE, _) => fail_with(">=", "integer expressions"),
-                        (Int, EQ, Int) => Ok(Bool),
-                        (Bool, EQ, Bool) => Ok(Bool),
-                        (String, EQ, String) => Ok(Bool),
-                        // todo (ext) support comparing arrays and objects with null
-                        (_, EQ, _) => fail_with("==", "two operands of same type: integer, boolean or string"),
-                        (Int, NE, Int) => Ok(Bool),
-                        (Bool, NE, Bool) => Ok(Bool),
-                        (String, NE, String) => Ok(Bool),
-                        // todo (ext) support comparing arrays and objects with null
-                        (_, NE, _) => fail_with("!=", "two operands of same type: integer, boolean or string"),
+                        (Bool, EQ, Bool) | (String, EQ, String) => Ok(Bool),
+                        (Class(_), EQ, Null) | (Null, EQ, Class(_))
+                        | (Array(_), EQ, Null) | (Null, EQ, Array(_)) => Ok(Bool),
+                        (_, EQ, _) => fail_with("==", "two operands of same type: integer, boolean and string, or used to check if array or class reference is null"),
+                        (Bool, NE, Bool) | (String, NE, String) => Ok(Bool),
+                        (Class(_), NE, Null) | (Null, NE, Class(_))
+                        | (Array(_), NE, Null) | (Null, NE, Array(_)) => Ok(Bool),
+                        (_, NE, _) => fail_with("!=", "two operands of same type: integer, boolean and string, or used to check if array or class reference is null"),
                     },
                     (Ok(_), err @ Err(_)) => err,
                     (err @ Err(_), Ok(_)) => err,
