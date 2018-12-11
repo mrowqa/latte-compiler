@@ -188,14 +188,39 @@ impl<'a> GlobalContext<'a> {
         rhs: &'a InnerType,
         span: Span,
     ) -> FrontendResult<()> {
-        // todo (ext) allow the following:
-        // lhs=array/obj, rhs=null
-        // lhs=superclass, rhs=subclass
-        if lhs == rhs {
-            Ok(())
+        use self::InnerType::{Array, Class, Null};
+        match (lhs, rhs) {
+            _ if lhs == rhs => Ok(()),
+            (Array(_), Null) | (Class(_), Null) => Ok(()),
+            (Class(superclass), Class(subclass)) => {
+                if self.check_if_subclass(superclass, subclass) {
+                    Ok(())
+                } else {
+                    let err = format!("Error: expected type {0}, got type {1} (note: {1} is not a subclass of {0})", lhs, rhs);
+                    Err(vec![FrontendError { err, span }])
+                }
+            }
+            _ => {
+                let err = format!("Error: expected type {}, got type {}", lhs, rhs);
+                Err(vec![FrontendError { err, span }])
+            }
+        }
+    }
+
+    fn check_if_subclass(&self, superclass: &str, subclass: &str) -> bool {
+        let cl_desc = self
+            .classes
+            .get(subclass)
+            .expect("assumption: tree made by our parser");
+        if cl_desc.name == superclass {
+            true
+        } else if let Some(t) = cl_desc.parent_type {
+            match &t.inner {
+                InnerType::Class(parent_name) => self.check_if_subclass(superclass, &parent_name),
+                _ => unreachable!(), // assumption: tree made by our parser
+            }
         } else {
-            let err = format!("Error: expected type {}, got type {}", lhs, rhs);
-            Err(vec![FrontendError { err, span }])
+            false
         }
     }
 }
