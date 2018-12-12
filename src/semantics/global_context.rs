@@ -64,7 +64,12 @@ impl<'a> GlobalContext<'a> {
             match def {
                 TopDef::FunDef(fun) => {
                     let fun_desc = FunDesc::from(&fun);
-                    if self.functions.insert(fun_desc.name, fun_desc).is_some() {
+                    if self.classes.get(fun_desc.name).is_some() {
+                        errors.push(FrontendError {
+                            err: "Error: class with same name already defined".to_string(),
+                            span: fun.name.span,
+                        });
+                    } else if self.functions.insert(fun_desc.name, fun_desc).is_some() {
                         errors.push(FrontendError {
                             err: "Error: function redefinition".to_string(),
                             span: fun.name.span,
@@ -75,7 +80,13 @@ impl<'a> GlobalContext<'a> {
                     let class_desc_res = ClassDesc::from(&cl);
                     match class_desc_res {
                         Ok(desc) => {
-                            if self.classes.insert(desc.name, desc).is_some() {
+                            if self.functions.get(desc.name).is_some() {
+                                errors.push(FrontendError {
+                                    err: "Error: function with same name already defined"
+                                        .to_string(),
+                                    span: cl.name.span,
+                                });
+                            } else if self.classes.insert(desc.name, desc).is_some() {
                                 errors.push(FrontendError {
                                     err: "Error: class redefinition".to_string(),
                                     span: cl.name.span,
