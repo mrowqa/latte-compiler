@@ -1,10 +1,65 @@
-Brudna wersja, o czym warto pamietac!
+Latte, frontend
 
-Zmiany w gramatyce:
-- hack na ifie?
-- komentarze zrobione recznie...
-- nie ma rzutowan typow
-- indeksowanie tablicy przez arr.[idx], bo: (poczatek funkcji, Stmt) Ident (*) "[" nie wiemy czy dalej Expr "]" czy samo "]" (typ nazwa = ..., czy arr[idx] = ...)
-- frontend stara sie zwrocic tyle bledow naraz, ile sie da
+Students, Srodowisko
+====================
 
-Jest pretty printing bledow, w tym wielolinijkowych.
+$ rustc --version
+Lokalnie pracuje z najnowsza wersja (1.31.0), na studentsie mam 1.29.2
+(zainstalowana przed oddaniem instanta) i kod rowniez sie tam kompiluje.
+
+Instalacja Rusta (na wszelki wypadek):
+$ curl https://sh.rustup.rs -sSf | sh
+Aktualizacja Rusta:
+$ rustup update
+
+Zbudowanie projektu (w wersji Debug, szybciej sie kompiluje):
+$ cargo build
+
+Uruchomienie programu:
+$ cargo run plik.lat
+
+
+Podjete decyzje
+===============
+
+- zmienilem skladnie dla indeksowania tablicy: arr.[idx]
+- nie wspieram rzutowania
+- for(int x : arr) {...} jest rownoznaczny:
+  int i = 0;
+  while (i < arr.length) {
+    int x = arr.[i]; // jedyna w swoim zakresie widocznosci,
+                     // w zaleznosci od typu -
+                     // operujemy na kopii lub referencji
+    {...}
+  }
+- dopuszczam martwy kod (np. if true czy while false)
+- brak sztucznych ograniczen przy wyrazeniach - np. mozna odwolac sie do pola
+  obiektu, gdy obiekt jest wynikiem wyrazenia, a nie tylko zmienna, podobnie
+  przy tablicach
+- programista odpowiada za weryfikacje, czy referencja do obiektu lub tablicy
+  nie jest nullem, wpp. zachowanie jest niezdefiniowane (prawdopodobnie bedzie
+  segfault),
+- string jest typem referencyjnym, ale nigdy nie jest nullem (domyslnie jest
+  napisem pustym),
+- poprawnym jest:
+  void foo() {}
+  void bar() {return foo();}
+- wszelkie symbole (funkcje, zmienne, klasy) wspoldziela przestrzenie nazw,
+  tzn. nie mozna miec klasy i globalnej funkcji o tej samej nazwie ani
+  pola w klasie i metody o tej samej nazwie.
+- w przypadku dlugiego literalu liczbowego, parser moze sie scrashowac
+
+
+Drobne uwagi
+============
+
+- cargo run buduje projekt, jesli nie jest zbudowany lub sie zmieni,
+  a za zmiane uwaza sie rowniez zmiane plikow lokalnych, wiec warto
+  trzymac pliki .lat poza katalogiem projektu (albo uruchamiac binarke
+  bezposrednio - jest gdzies w katalogu target/).
+- generator parserow lalrpop, z ktorego korzystam, nie wspiera komentarzy,
+  wiec recznie je usuwam przed przekazaniem kodu do parsera (testowalem,
+  ale zawsze moglem cos przeoczyc),
+- staram sie wypisac tyle bledow na raz ile sie da,
+- uruchamialem testy przykladowe i studentow - wszystko dziala jak powinno
+
