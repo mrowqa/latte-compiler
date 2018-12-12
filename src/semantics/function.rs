@@ -171,16 +171,18 @@ impl<'a> FunctionContext<'a> {
 
         use self::InnerStmt::*;
         for st in &block.stmts {
-            if after_ret {
-                errors.push(FrontendError {
-                    err: "Error: unreachable statement after return statement".to_string(),
-                    span: st.span,
-                })
-            }
+            // it could be a warning, though
+            // (we need to accept unreachable code)
+            // if after_ret {
+            //     errors.push(FrontendError {
+            //         err: "Error: unreachable statement after return statement".to_string(),
+            //         span: st.span,
+            //     })
+            // }
             match &st.inner {
                 Empty => (),
                 Block(bl) => match self.enter_block(fun, &bl, &cur_env) {
-                    Ok(does_ret) => after_ret = does_ret,
+                    Ok(does_ret) => after_ret |= does_ret,
                     Err(err) => errors.extend(err),
                 },
                 Decl {
@@ -268,7 +270,7 @@ impl<'a> FunctionContext<'a> {
                         },
                         None => false,
                     };
-                    after_ret = match cond_state {
+                    after_ret |= match cond_state {
                         Some(true) => br1_ret,
                         Some(false) => br2_ret,
                         None => br1_ret && br2_ret,
@@ -278,13 +280,13 @@ impl<'a> FunctionContext<'a> {
                     self.check_expression_check_type(&cond_expr, &InnerType::Bool, &cur_env)
                         .accumulate_errors_in(&mut errors);
                     match self.enter_block(fun, &body_bl, &cur_env) {
-                        Ok(does_ret) => after_ret = does_ret,
+                        Ok(does_ret) => after_ret |= does_ret,
                         Err(err) => errors.extend(err),
                     };
                     match &cond_expr.inner {
                         // while (true) just loops, so we don't have to check if we return after it
                         // while (false) just need to be skipped,
-                        InnerExpr::LitBool(ret) => after_ret = *ret,
+                        InnerExpr::LitBool(ret) => after_ret |= *ret,
                         _ => (),
                     };
                 }
@@ -312,7 +314,7 @@ impl<'a> FunctionContext<'a> {
                     }
 
                     match self.enter_block(fun, body, &new_env) {
-                        Ok(does_ret) => after_ret = does_ret,
+                        Ok(does_ret) => after_ret |= does_ret,
                         Err(err) => errors.extend(err),
                     }
                 }
