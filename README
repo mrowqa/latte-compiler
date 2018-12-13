@@ -46,8 +46,13 @@ Podjete decyzje
   void bar() {return foo();}
 - wszelkie symbole (funkcje, zmienne, klasy) wspoldziela przestrzenie nazw,
   tzn. nie mozna miec klasy i globalnej funkcji o tej samej nazwie ani
-  pola w klasie i metody o tej samej nazwie.
-- w przypadku dlugiego literalu liczbowego, parser moze sie scrashowac
+  pola w klasie i metody o tej samej nazwie,
+- w przypadku dlugiego literalu liczbowego, parser moze sie scrashowac,
+- w metodach, nie ma self, this ani tym podobnych,
+- dzielenie przez zero w wyrazeniach stalych jest wykrywane w czasie
+  parsowania (mozna dostac syntax error i obok dzielenie przez 0),
+- wystepuja niejawne konwersje: podklasy do nadklasy, oraz nulla do klasy
+  lub tablicy,
 
 
 Drobne uwagi
