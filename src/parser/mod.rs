@@ -131,7 +131,12 @@ fn optimize_const_expr_shallow(expr: InnerExpr) -> Result<InnerExpr, &'static st
                 }
                 LitInt(l / r)
             }
-            (LitInt(l), Mod, LitInt(r)) => LitInt(l % r),
+            (LitInt(l), Mod, LitInt(r)) => {
+                if *r == 0 {
+                    return Err("Assertion Error: Division by zero in constant expression");
+                }
+                LitInt(l % r)
+            }
             (LitInt(l), LT, LitInt(r)) => LitBool(l < r),
             (LitInt(l), LE, LitInt(r)) => LitBool(l <= r),
             (LitInt(l), GT, LitInt(r)) => LitBool(l > r),
