@@ -2,6 +2,7 @@
 extern crate lalrpop_util;
 extern crate colored;
 
+pub mod codegen;
 pub mod codemap;
 pub mod frontend_error;
 pub mod model;

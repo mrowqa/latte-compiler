@@ -1,9 +1,10 @@
+use model::ast;
 use std::collections::HashSet;
 
 pub struct Program {
     pub structs: Vec<Struct>,
     pub functions: Vec<Function>,
-    // todo (optional): global strings
+    // todo: global strings
 }
 
 pub struct Struct {
@@ -18,16 +19,16 @@ pub struct Function {
     pub blocks: Vec<Block>,
 }
 
-pub type Label = u32;
-pub type RegNum = u32;
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+pub struct Label(pub u32);
+
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+pub struct RegNum(pub u32);
+
 pub struct Block {
     pub label: Label,
     pub phi_set: HashSet<(RegNum, Type, Vec<(Value, Label)>)>,
     pub body: Vec<Operation>,
-    // todo should we remember here the following? probably no
-    // predecessors
-    // successors
-    // map (per block): VarName -> Register
 }
 
 // almost-quadruple code
@@ -59,6 +60,7 @@ pub enum CmpOp {
     NE,
 }
 
+#[derive(PartialEq, Eq, Hash)]
 pub enum Value {
     LitInt(i32),
     LitBool(bool),
@@ -66,10 +68,28 @@ pub enum Value {
     Register(Type, RegNum),
 }
 
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Type {
+    Void,
     Int,
     Bool,
     Char,
     Ptr(Box<Type>),
     Struct(String),
 }
+
+impl Type {
+    pub fn from_ast(ast_type: &ast::InnerType) -> Type {
+        match ast_type {
+            ast::InnerType::Int => Type::Int,
+            ast::InnerType::Bool => Type::Bool,
+            ast::InnerType::String => Type::Ptr(Box::new(Type::Char)),
+            ast::InnerType::Array(subtype) => Type::Ptr(Box::new(Type::from_ast(&subtype))),
+            ast::InnerType::Class(name) => Type::Ptr(Box::new(Type::Struct(name.clone()))),
+            ast::InnerType::Null => Type::Ptr(Box::new(Type::Void)),
+            ast::InnerType::Void => Type::Void,
+        }
+    }
+}
+// todo?
+// value : to type

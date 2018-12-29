@@ -44,17 +44,12 @@ impl<'a> Env<'a> {
         }
     }
 
-    pub fn get_variable(
-        &self,
-        global_ctx: &GlobalContext<'a>, // todo (optional) theoretically, can get it from Root(_) or also have it in Nested
-        name: &str,
-        span: Span,
-    ) -> FrontendResult<InnerType> {
+    pub fn get_variable(&self, name: &str, span: Span) -> FrontendResult<InnerType> {
         match self {
             Env::Root(ctx) => {
                 let mut err_msg = None;
                 if let Some(cctx) = ctx.class_ctx {
-                    match cctx.get_item(global_ctx, name) {
+                    match cctx.get_item(ctx.global_ctx, name) {
                         Some(TypeWrapper::Var(t)) => return Ok(t.inner.clone()),
                         Some(TypeWrapper::Fun(_)) => {
                             err_msg = Some("Error: expected variable, found a class method")
@@ -76,22 +71,17 @@ impl<'a> Env<'a> {
             }
             Env::Nested { locals, parent } => match locals.get(name) {
                 Some(t) => Ok(t.inner.clone()),
-                None => parent.get_variable(global_ctx, name, span),
+                None => parent.get_variable(name, span),
             },
         }
     }
 
-    pub fn get_function(
-        &self,
-        global_ctx: &'a GlobalContext<'a>, // todo (optional) theoretically, can get it from Root(_) or also have it in Nested
-        name: &str,
-        span: Span,
-    ) -> FrontendResult<&'a FunDesc<'a>> {
+    pub fn get_function(&self, name: &str, span: Span) -> FrontendResult<&'a FunDesc<'a>> {
         match self {
             Env::Root(ctx) => {
                 let mut err_msg = None;
                 if let Some(cctx) = ctx.class_ctx {
-                    match cctx.get_item(global_ctx, name) {
+                    match cctx.get_item(ctx.global_ctx, name) {
                         Some(TypeWrapper::Fun(f)) => return Ok(f),
                         Some(TypeWrapper::Var(_)) => {
                             err_msg = Some("Error: expected function, found a class field")
@@ -116,7 +106,7 @@ impl<'a> Env<'a> {
                     err: "Error: expected function, got a variable".to_string(),
                     span,
                 }]),
-                None => parent.get_function(global_ctx, name, span),
+                None => parent.get_function(name, span),
             },
         }
     }
@@ -403,7 +393,7 @@ impl<'a> FunctionContext<'a> {
         use self::InnerType::*;
         use self::InnerUnaryOp::*;
         match &expr.inner {
-            LitVar(var) => cur_env.get_variable(self.global_ctx, &var, expr.span),
+            LitVar(var) => cur_env.get_variable(&var, expr.span),
             LitInt(_) => Ok(Int),
             LitBool(_) => Ok(Bool),
             LitStr(_) => Ok(String),
@@ -412,11 +402,8 @@ impl<'a> FunctionContext<'a> {
                 function_name,
                 args,
             } => {
-                let fun_desc = cur_env.get_function(
-                    self.global_ctx,
-                    function_name.inner.as_ref(),
-                    function_name.span,
-                )?;
+                let fun_desc =
+                    cur_env.get_function(function_name.inner.as_ref(), function_name.span)?;
                 validate_fun_call(&fun_desc, &args)
             }
             BinaryOp(lhs, op, rhs) => {
