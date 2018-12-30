@@ -1,6 +1,7 @@
 use codegen::function::FunctionCodeGen;
 use model::{ast, ir};
 use semantics::global_context::GlobalContext;
+use std::collections::HashMap;
 
 mod function;
 
@@ -18,18 +19,20 @@ impl<'a> CodeGen<'a> {
         let mut prog_ir = ir::Program {
             structs: vec![],
             functions: vec![],
-            // todo global strings
+            global_strings: HashMap::new(),
         };
 
         for def in &self.ast.defs {
             match def {
                 ast::TopDef::FunDef(fun) => {
-                    let gfun_cg = FunctionCodeGen::new(None, &self.gctx);
+                    let gfun_cg =
+                        FunctionCodeGen::new(&self.gctx, None, &mut prog_ir.global_strings);
                     let fun_ir = gfun_cg.generate_function_ir(&fun);
                     prog_ir.functions.push(fun_ir);
                 }
                 ast::TopDef::ClassDef(_cl) => {
-                    // todo
+                    // todo (ext)
+                    unimplemented!()
                     // let cl_desc = gctx.get_class_description(&cl.name.inner).expect(err_msg);
                     // let cl_ctx = FunctionContext::new(Some(cl_desc), &gctx);
                     // for it in &cl.items {

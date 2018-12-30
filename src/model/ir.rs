@@ -1,10 +1,10 @@
 use model::ast;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub struct Program {
     pub structs: Vec<Struct>,
     pub functions: Vec<Function>,
-    // todo: global strings
+    pub global_strings: HashMap<String, GlobalStrNum>,
 }
 
 pub struct Struct {
@@ -24,6 +24,9 @@ pub struct Label(pub u32);
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct RegNum(pub u32);
+
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+pub struct GlobalStrNum(pub u32);
 
 pub struct Block {
     pub label: Label,
@@ -60,12 +63,13 @@ pub enum CmpOp {
     NE,
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub enum Value {
     LitInt(i32),
     LitBool(bool),
     LitNullPtr,
     Register(RegNum, Type),
+    GlobalRegister(GlobalStrNum),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone)]
@@ -76,6 +80,18 @@ pub enum Type {
     Char,
     Ptr(Box<Type>),
     Struct(String),
+}
+
+impl Value {
+    pub fn get_type(&self) -> Type {
+        match self {
+            Value::LitInt(_) => Type::Int,
+            Value::LitBool(_) => Type::Bool,
+            Value::LitNullPtr => Type::Ptr(Box::new(Type::Void)),
+            Value::Register(_, t) => t.clone(),
+            Value::GlobalRegister(_) => Type::Ptr(Box::new(Type::Char)),
+        }
+    }
 }
 
 impl Type {
@@ -91,5 +107,3 @@ impl Type {
         }
     }
 }
-// todo?
-// value : to type

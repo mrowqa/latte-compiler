@@ -410,15 +410,15 @@ impl<'a> FunDesc<'a> {
 fn get_builtin_functions() -> HashMap<&'static str, FunDesc<'static>> {
     let t_void = &Type {
         inner: InnerType::Void,
-        span: (0, 0),
+        span: EMPTY_SPAN,
     };
     let t_int = &Type {
         inner: InnerType::Int,
-        span: (0, 0),
+        span: EMPTY_SPAN,
     };
     let t_string = &Type {
         inner: InnerType::String,
-        span: (0, 0),
+        span: EMPTY_SPAN,
     };
 
     let mut m = HashMap::new();

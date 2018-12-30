@@ -13,6 +13,7 @@ pub enum TopDef {
 }
 
 pub type Span = (usize, usize);
+pub const EMPTY_SPAN: Span = (0, 0);
 pub type Ident = ItemWithSpan<String>;
 
 #[derive(Debug)]

@@ -80,13 +80,13 @@ impl<'a> SemanticAnalyzer<'a> {
                 } else {
                     Err(vec![FrontendError {
                     err: "Error: main function has invalid signature, it must return int and take no arguments".to_string(),
-                    span: (0, 0), // we could have correct span here, though
+                    span: EMPTY_SPAN, // we could have correct span here, though
                 }])
                 }
             }
             None => Err(vec![FrontendError {
                 err: "Error: main function not found".to_string(),
-                span: (0, 0),
+                span: EMPTY_SPAN,
             }]),
         }
     }
