@@ -65,7 +65,7 @@ pub enum Value {
     LitInt(i32),
     LitBool(bool),
     LitNullPtr,
-    Register(Type, RegNum),
+    Register(RegNum, Type),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone)]
