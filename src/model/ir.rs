@@ -1,5 +1,6 @@
 use model::ast;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 
 pub struct Program {
     pub structs: Vec<Struct>,
@@ -105,5 +106,29 @@ impl Type {
             ast::InnerType::Null => Type::Ptr(Box::new(Type::Void)),
             ast::InnerType::Void => Type::Void,
         }
+    }
+}
+
+impl fmt::Display for Program {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // todo (ext) structs
+        // todo prolog
+
+        for fun in self.functions {
+            fun.fmt(f)?;
+        }
+
+        for (k, v) in self.global_strings {
+            // todo this loop
+            // todo (meh, extra code needed when using global string...)
+        }
+
+        unimplemented!()
+    }
+}
+
+impl fmt::Display for Function {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        unimplemented!() // todo
     }
 }

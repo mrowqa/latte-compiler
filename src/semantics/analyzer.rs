@@ -22,6 +22,10 @@ impl<'a> SemanticAnalyzer<'a> {
         self.check_main_signature()
     }
 
+    pub fn get_global_ctx(&self) -> Option<&GlobalContext<'a>> {
+        self.ctx.as_ref()
+    }
+
     fn calculate_global_context(&mut self) -> FrontendResult<()> {
         if self.ctx.is_some() {
             return Ok(());

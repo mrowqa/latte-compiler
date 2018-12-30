@@ -7,11 +7,11 @@ mod function;
 
 pub struct CodeGen<'a> {
     ast: &'a ast::Program,
-    gctx: GlobalContext<'a>,
+    gctx: &'a GlobalContext<'a>,
 }
 
 impl<'a> CodeGen<'a> {
-    pub fn new(ast: &'a ast::Program, gctx: GlobalContext<'a>) -> CodeGen<'a> {
+    pub fn new(ast: &'a ast::Program, gctx: &'a GlobalContext<'a>) -> CodeGen<'a> {
         CodeGen { ast, gctx }
     }
 

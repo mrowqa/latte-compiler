@@ -388,6 +388,7 @@ impl<'a> FunctionCodeGen<'a> {
                 for a in args {
                     let (new_label, value) = self.process_expression(&a.inner, cur_label);
                     cur_label = new_label;
+                    // todo (ext) handle nulls (implicit casts)
                     args_values.push(value);
                 }
 

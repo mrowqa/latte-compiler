@@ -17,5 +17,8 @@ pub fn compile(filename: &str, code: &str) -> Result<String, String> {
     let mut sem_anal = semantics::SemanticAnalyzer::new(&ast);
     let res = sem_anal.perform_full_analysis();
     res.map_err(|e| frontend_error::format_errors(&codemap, &e))?;
+    let ir = codegen::CodeGen::new(&ast, sem_anal.get_global_ctx().unwrap());
+    // todo print ir
+    // todo (outside) link code
     Ok(format!("{:?}", ast))
 }
