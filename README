@@ -68,3 +68,9 @@ Drobne uwagi
 - staram sie wypisac tyle bledow na raz ile sie da,
 - uruchamialem testy przykladowe i studentow - wszystko dziala jak powinno
 
+
+Runtime skompilowany z:
+$ clang -m32 -O3 -S -emit-llvm -o lib/runtime.{ll,c}
+$ llvm-as lib/runtime.ll
+
+Reszta opisu kompilacji jest w src/main.rs.

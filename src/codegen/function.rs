@@ -121,8 +121,6 @@ pub struct FunctionCodeGen<'a> {
     blocks: Vec<ir::Block>,
     next_reg_num: ir::RegNum,
 }
-// todo handle builtins somehow
-// todo runtime
 
 impl<'a> FunctionCodeGen<'a> {
     pub fn new(
@@ -143,15 +141,28 @@ impl<'a> FunctionCodeGen<'a> {
     pub fn generate_function_ir(mut self, fun_def: &'a ast::FunDef) -> ir::Function {
         let mut ir_args = vec![];
         for (ast_type, ast_ident) in &fun_def.args {
+            let reg_num = self.fresh_reg_num();
             let arg_type = ir::Type::from_ast(&ast_type.inner);
-            let arg_val = ir::Value::Register(self.fresh_reg_num(), arg_type.clone());
-            ir_args.push((arg_type, ast_ident.inner.clone()));
+            let arg_val = ir::Value::Register(reg_num, arg_type.clone());
+            ir_args.push((reg_num, arg_type));
             self.env
                 .update_local_variable(ARGS_LABEL, ast_ident.inner.as_ref(), arg_val);
         }
 
         let entry_point = self.allocate_new_block(ARGS_LABEL);
-        self.process_block(&fun_def.body, entry_point, false);
+        let last_label = self.process_block(&fun_def.body, entry_point, false);
+        match fun_def.ret_type.inner {
+            ast::InnerType::Void => {
+                let last_block = self.get_block(last_label);
+                match last_block.body.last() {
+                    Some(ir::Operation::Return(None)) => (),
+                    _ => {
+                        last_block.body.push(ir::Operation::Return(None));
+                    }
+                }
+            }
+            _ => (),
+        }
 
         ir::Function {
             ret_type: ir::Type::from_ast(&fun_def.ret_type.inner),
@@ -207,6 +218,7 @@ impl<'a> FunctionCodeGen<'a> {
                                 }
                             }
                         };
+                        // todo (ext) handle nulls
                         self.env
                             .update_local_variable(cur_label, var_name.inner.as_ref(), value)
                     }
@@ -291,7 +303,7 @@ impl<'a> FunctionCodeGen<'a> {
                     }
                 },
                 While(cond, block) => match &cond.inner {
-                    //ast::InnerExpr::LitBool(true) => {} // todo (optional) some UNREACHABLE_LABEL (?) for not generating dead code?
+                    //ast::InnerExpr::LitBool(true) => {} // todo (optional) some UNREACHABLE_LABEL (?) for not generating dead code? or unreachable llvm instruction?
                     ast::InnerExpr::LitBool(false) => (),
                     expr => {
                         let cond_label = self.allocate_new_block(cur_label);
@@ -371,7 +383,25 @@ impl<'a> FunctionCodeGen<'a> {
             }
             LitInt(int_val) => (cur_label, ir::Value::LitInt(*int_val)),
             LitBool(bool_val) => (cur_label, ir::Value::LitBool(*bool_val)),
-            LitStr(str_val) => (cur_label, self.get_global_string(str_val)),
+            LitStr(str_val) => {
+                let reg_num = self.fresh_reg_num();
+                let str_ir_val = self.get_global_string(str_val);
+                match str_ir_val {
+                    ir::Value::GlobalRegister(str_num) => {
+                        self.get_block(cur_label)
+                            .body
+                            .push(ir::Operation::CastGlobalString(
+                                reg_num,
+                                str_val.len() + 1,
+                                str_num,
+                            ))
+                    }
+                    _ => unreachable!(),
+                }
+                let str_type = ir::Type::Ptr(Box::new(ir::Type::Char));
+                let casted_val = ir::Value::Register(reg_num, str_type);
+                (cur_label, casted_val)
+            }
             LitNull => (cur_label, ir::Value::LitNullPtr),
             FunCall {
                 function_name,
@@ -521,6 +551,7 @@ impl<'a> FunctionCodeGen<'a> {
                 ValueWrapper::ClassValue(_) => unreachable!(),
             };
 
+            // todo if both same as in common parent!
             if value1 != value2 {
                 phi_set.insert((name, value1.clone(), value2.clone()));
             }
