@@ -9,7 +9,9 @@ use std::process;
 fn main() {
     let args: Vec<_> = env::args().collect();
 
-    if !(args.len() == 2 || (args.len() == 3 && args[1] == "--make-executable")) {
+    if !(args.len() == 2 && args[1] != "--make-executable"
+        || (args.len() == 3 && args[1] == "--make-executable"))
+    {
         eprintln!("Usage: {} [--make-executable] <filename.lat>", args[0]);
         process::exit(1);
     }
@@ -75,6 +77,7 @@ fn main() {
             println!("Compiling runtime.");
             if !run_command(&[
                 "llc",
+                "-O3",
                 "-march=x86",
                 "-filetype=obj",
                 "-o",
@@ -91,6 +94,7 @@ fn main() {
 
         if !run_command(&[
             "llc",
+            "-O3",
             "-march=x86",
             "-filetype=obj",
             "-o",
@@ -103,6 +107,7 @@ fn main() {
 
         if run_command(&[
             "gcc",
+            "-O3",
             "-m32",
             "-lreadline",
             "-o",
@@ -129,3 +134,6 @@ fn run_command(cmd: &[&str]) -> bool {
         Err(_) => false,
     }
 }
+// todo test on students
+// todo describe used libs in readme
+// todo test against official tests

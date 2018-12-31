@@ -223,42 +223,51 @@ impl<'a> FunctionCodeGen<'a> {
                             .update_local_variable(cur_label, var_name.inner.as_ref(), value)
                     }
                 }
-                Assign(_, _) | Incr(_) | Decr(_) => {
-                    // todo refactor it somehow
-                    let mut handle_assignment = |lhs: &'a ast::Expr, rhs: &'a ast::Expr| {
-                        let (new_label, value) = self.process_expression(&rhs.inner, cur_label);
-                        cur_label = new_label;
-                        match &lhs.inner {
-                            ast::InnerExpr::LitVar(var_name) => {
-                                self.env.update_local_variable(cur_label, &var_name, value);
-                            }
-                            _ => unimplemented!(), // todo (ext)
-                        };
+                Assign(lhs, rhs) => {
+                    // todo (ext) refactor assign/incr/decr somehow
+                    let (new_label, value) = self.process_expression(&rhs.inner, cur_label);
+                    cur_label = new_label;
+                    match &lhs.inner {
+                        ast::InnerExpr::LitVar(var_name) => {
+                            self.env.update_local_variable(cur_label, &var_name, value);
+                        }
+                        _ => unimplemented!(), // todo (ext)
                     };
-
-                    match &stmt.inner {
-                        Assign(lhs, rhs) => {
-                            handle_assignment(lhs, rhs);
-                        }
-                        Incr(_lhs) => {
-                            // todo
-                            unimplemented!()
-                            // let rhs = ast::InnerExpr::BinaryOp(
-                            //     lhs.clone(),
-                            //     ast::BinaryOp::Add,
-                            //     ast::new_spanned_boxed(0, ast::InnerExpr::LitInt(1), 0),
-                            // );
-                        }
-                        Decr(_) => unimplemented!(), // todo
+                }
+                Incr(lhs) | Decr(lhs) => {
+                    let op = match &stmt.inner {
+                        Incr(_) => ir::ArithOp::Add,
+                        Decr(_) => ir::ArithOp::Sub,
                         _ => unreachable!(),
-                    }
+                    };
+                    match &lhs.inner {
+                        ast::InnerExpr::LitVar(var_name) => {
+                            let new_reg = self.fresh_reg_num();
+                            let val_l = match self.env.get_variable(cur_label, var_name) {
+                                ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
+                                ValueWrapper::ClassValue(_) => unimplemented!(), // todo (ext)
+                            };
+                            let val_r = ir::Value::LitInt(1);
+                            self.get_block(cur_label)
+                                .body
+                                .push(ir::Operation::Arithmetic(new_reg, op, val_l, val_r));
+                            let val_res = ir::Value::Register(new_reg, ir::Type::Int);
+                            self.env
+                                .update_local_variable(cur_label, &var_name, val_res);
+                        }
+                        _ => unimplemented!(), // todo (ext)
+                    };
                 }
                 Ret(opt_expr) => {
-                    let opt_value = opt_expr.as_ref().map(|expr| {
+                    let mut opt_value = opt_expr.as_ref().map(|expr| {
                         let (new_label, value) = self.process_expression(&expr.inner, cur_label);
                         cur_label = new_label;
                         value
                     });
+                    opt_value = match opt_value {
+                        Some(ir::Value::Register(_, ir::Type::Void)) => None,
+                        _ => opt_value,
+                    };
                     self.get_block(cur_label)
                         .body
                         .push(ir::Operation::Return(opt_value));
@@ -276,6 +285,7 @@ impl<'a> FunctionCodeGen<'a> {
                         None => (),
                     },
                     expr => {
+                        // todo readme <- optimization
                         let true_label = self.allocate_new_block(cur_label);
                         let false_label = self.allocate_new_block(cur_label);
                         self.process_expression_cond(&expr, cur_label, true_label, false_label);
@@ -292,13 +302,18 @@ impl<'a> FunctionCodeGen<'a> {
                             }
                             None => {
                                 cont_label = false_label;
-                                false_label
+                                cur_label
                             }
                         };
                         self.get_block(end_true_label)
                             .body
                             .push(ir::Operation::Branch1(cont_label));
-                        self.calculate_phi_set(cont_label, end_true_label, end_false_label);
+                        self.calculate_phi_set(
+                            cur_label,
+                            end_true_label,
+                            end_false_label,
+                            cont_label,
+                        );
                         cur_label = cont_label;
                     }
                 },
@@ -306,9 +321,15 @@ impl<'a> FunctionCodeGen<'a> {
                     //ast::InnerExpr::LitBool(true) => {} // todo (optional) some UNREACHABLE_LABEL (?) for not generating dead code? or unreachable llvm instruction?
                     ast::InnerExpr::LitBool(false) => (),
                     expr => {
+                        // todo bug (circular dependency):
+                        // cond and body must be processed to calculate phi set
+                        // phi set must be calculated to have valid registers for cond and body
                         let cond_label = self.allocate_new_block(cur_label);
-                        let body_label = self.allocate_new_block(cur_label);
-                        let cont_label = self.allocate_new_block(cur_label);
+                        // cond_label is just fine for body_label and cond_label
+                        // they will see phi functions and local variables
+                        // can't be changed further in condition block
+                        let body_label = self.allocate_new_block(cond_label);
+                        let cont_label = self.allocate_new_block(cond_label);
                         self.get_block(cur_label)
                             .body
                             .push(ir::Operation::Branch1(cond_label));
@@ -317,7 +338,7 @@ impl<'a> FunctionCodeGen<'a> {
                         self.get_block(end_body_label)
                             .body
                             .push(ir::Operation::Branch1(cond_label));
-                        self.calculate_phi_set(cond_label, cur_label, body_label);
+                        self.calculate_phi_set(cur_label, cur_label, end_body_label, cond_label);
                         cur_label = cont_label;
                     }
                 },
@@ -341,7 +362,7 @@ impl<'a> FunctionCodeGen<'a> {
         true_label: ir::Label,
         false_label: ir::Label,
     ) {
-        // todo add to readme, ! optimisation, if and while optimisations
+        // todo add to readme, ! optimisation, if and while optimizations
         use model::ast::{BinaryOp::*, InnerExpr::*, InnerUnaryOp::*};
         match expr {
             BinaryOp(lhs, And, rhs) => {
@@ -438,68 +459,113 @@ impl<'a> FunctionCodeGen<'a> {
                     ));
                 (cur_label, ir::Value::Register(reg_num, info.ret_type))
             }
-            BinaryOp(lhs, op, rhs) => {
-                match op {
-                    And | Or => {
-                        let true_label = self.allocate_new_block(cur_label);
-                        let false_label = self.allocate_new_block(cur_label);
-                        self.process_expression_cond(&expr, cur_label, true_label, false_label);
-                        let cont_label = self.allocate_new_block(cur_label);
-                        self.get_block(true_label)
-                            .body
-                            .push(ir::Operation::Branch1(cont_label));
-                        self.get_block(false_label)
-                            .body
-                            .push(ir::Operation::Branch1(cont_label));
-                        let new_reg = self.fresh_reg_num();
-                        self.get_block(cont_label).phi_set.insert((
-                            new_reg,
-                            ir::Type::Bool,
-                            vec![
-                                (ir::Value::LitBool(true), true_label),
-                                (ir::Value::LitBool(false), false_label),
-                            ],
-                        ));
-                        (cur_label, ir::Value::Register(new_reg, ir::Type::Bool))
-                    }
-                    Add | Sub | Mul | Div | Mod => {
-                        let (new_label, lhs_val) = self.process_expression(&lhs.inner, cur_label);
-                        let (new_label, rhs_val) = self.process_expression(&rhs.inner, new_label);
-                        // todo handle string concat
-                        let new_op = match op {
-                            Add => ir::ArithOp::Add,
-                            Sub => ir::ArithOp::Sub,
-                            Mul => ir::ArithOp::Mul,
-                            Div => ir::ArithOp::Div,
-                            Mod => ir::ArithOp::Mod,
-                            _ => unreachable!(),
-                        };
-                        let new_reg = self.fresh_reg_num();
-                        self.get_block(new_label)
-                            .body
-                            .push(ir::Operation::Arithmetic(new_reg, new_op, lhs_val, rhs_val));
-                        (new_label, ir::Value::Register(new_reg, ir::Type::Int))
-                    }
-                    LT | LE | GT | GE | EQ | NE => {
-                        let (new_label, lhs_val) = self.process_expression(&lhs.inner, cur_label);
-                        let (new_label, rhs_val) = self.process_expression(&rhs.inner, new_label);
-                        let new_op = match op {
-                            LT => ir::CmpOp::LT,
-                            LE => ir::CmpOp::LE,
-                            GT => ir::CmpOp::GT,
-                            GE => ir::CmpOp::GE,
-                            EQ => ir::CmpOp::EQ,
-                            NE => ir::CmpOp::NE,
-                            _ => unreachable!(),
-                        };
-                        let new_reg = self.fresh_reg_num();
-                        self.get_block(new_label)
-                            .body
-                            .push(ir::Operation::Compare(new_reg, new_op, lhs_val, rhs_val));
-                        (new_label, ir::Value::Register(new_reg, ir::Type::Bool))
+            BinaryOp(lhs, op, rhs) => match op {
+                And | Or => {
+                    let true_label = self.allocate_new_block(cur_label);
+                    let false_label = self.allocate_new_block(cur_label);
+                    self.process_expression_cond(&expr, cur_label, true_label, false_label);
+                    let cont_label = self.allocate_new_block(cur_label);
+                    self.get_block(true_label)
+                        .body
+                        .push(ir::Operation::Branch1(cont_label));
+                    self.get_block(false_label)
+                        .body
+                        .push(ir::Operation::Branch1(cont_label));
+                    let new_reg = self.fresh_reg_num();
+                    self.get_block(cont_label).phi_set.insert((
+                        new_reg,
+                        ir::Type::Bool,
+                        vec![
+                            (ir::Value::LitBool(true), true_label),
+                            (ir::Value::LitBool(false), false_label),
+                        ],
+                    ));
+                    (cur_label, ir::Value::Register(new_reg, ir::Type::Bool))
+                }
+                Add | Sub | Mul | Div | Mod => {
+                    let (new_label, lhs_val) = self.process_expression(&lhs.inner, cur_label);
+                    let (new_label, rhs_val) = self.process_expression(&rhs.inner, new_label);
+                    match lhs_val.get_type() {
+                        ir::Type::Int => {
+                            let new_op = match op {
+                                Add => ir::ArithOp::Add,
+                                Sub => ir::ArithOp::Sub,
+                                Mul => ir::ArithOp::Mul,
+                                Div => ir::ArithOp::Div,
+                                Mod => ir::ArithOp::Mod,
+                                _ => unreachable!(),
+                            };
+                            let new_reg = self.fresh_reg_num();
+                            self.get_block(new_label)
+                                .body
+                                .push(ir::Operation::Arithmetic(new_reg, new_op, lhs_val, rhs_val));
+                            (new_label, ir::Value::Register(new_reg, ir::Type::Int))
+                        }
+                        str_type @ ir::Type::Ptr(_) => {
+                            let new_reg = self.fresh_reg_num();
+                            self.get_block(new_label)
+                                .body
+                                .push(ir::Operation::FunctionCall(
+                                    Some(new_reg),
+                                    str_type.clone(),
+                                    "_bltn_string_concat".to_string(),
+                                    vec![lhs_val, rhs_val],
+                                ));
+                            (new_label, ir::Value::Register(new_reg, str_type))
+                        }
+                        _ => unreachable!(),
                     }
                 }
-            }
+                LT | LE | GT | GE | EQ | NE => {
+                    let (new_label, lhs_val) = self.process_expression(&lhs.inner, cur_label);
+                    let (new_label, rhs_val) = self.process_expression(&rhs.inner, new_label);
+                    match lhs_val.get_type() {
+                        ir::Type::Int | ir::Type::Bool => {
+                            let new_op = match op {
+                                LT => ir::CmpOp::LT,
+                                LE => ir::CmpOp::LE,
+                                GT => ir::CmpOp::GT,
+                                GE => ir::CmpOp::GE,
+                                EQ => ir::CmpOp::EQ,
+                                NE => ir::CmpOp::NE,
+                                _ => unreachable!(),
+                            }; // todo test &&, || and !
+                            let new_reg = self.fresh_reg_num();
+                            self.get_block(new_label)
+                                .body
+                                .push(ir::Operation::Compare(new_reg, new_op, lhs_val, rhs_val));
+                            (new_label, ir::Value::Register(new_reg, ir::Type::Bool))
+                        }
+                        ir::Type::Ptr(subtype) => {
+                            match *subtype {
+                                ir::Type::Char => {
+                                    // todo test compare strings (after fixing while-phi set problem)
+                                    let fun_name = match op {
+                                        EQ => "_bltn_string_eq",
+                                        NE => "_bltn_string_ne",
+                                        _ => unreachable!(),
+                                    };
+                                    let new_reg = self.fresh_reg_num();
+                                    self.get_block(cur_label).body.push(
+                                        ir::Operation::FunctionCall(
+                                            Some(new_reg),
+                                            ir::Type::Bool,
+                                            fun_name.to_string(),
+                                            vec![lhs_val, rhs_val],
+                                        ),
+                                    );
+                                    (cur_label, ir::Value::Register(new_reg, ir::Type::Bool))
+                                }
+                                _ => {
+                                    // todo (ext) comparing nulls with classes and arrays
+                                    unimplemented!()
+                                }
+                            }
+                        }
+                        ir::Type::Void | ir::Type::Char | ir::Type::Struct(_) => unreachable!(),
+                    }
+                }
+            },
             UnaryOp(op, lhs) => match &op.inner {
                 IntNeg => {
                     let (new_label, value) = self.process_expression(&lhs.inner, cur_label);
@@ -536,12 +602,22 @@ impl<'a> FunctionCodeGen<'a> {
         }
     }
 
-    fn calculate_phi_set(&mut self, target: ir::Label, br1: ir::Label, br2: ir::Label) {
+    fn calculate_phi_set(
+        &mut self,
+        common_pred: ir::Label,
+        br1: ir::Label,
+        br2: ir::Label,
+        common_succ: ir::Label,
+    ) {
         let names1 = self.env.get_all_visible_local_variables(br1);
         let names2 = self.env.get_all_visible_local_variables(br2);
         let mut phi_set = HashSet::new(); // needed to satisfy borrow checker
 
         for name in names2.union(&names1) {
+            let value0 = match self.env.get_variable(common_pred, name) {
+                ValueWrapper::GlobalOrLocalValue(v) => v,
+                ValueWrapper::ClassValue(_) => unreachable!(),
+            };
             let value1 = match self.env.get_variable(br1, name) {
                 ValueWrapper::GlobalOrLocalValue(v) => v,
                 ValueWrapper::ClassValue(_) => unreachable!(),
@@ -551,23 +627,25 @@ impl<'a> FunctionCodeGen<'a> {
                 ValueWrapper::ClassValue(_) => unreachable!(),
             };
 
-            // todo if both same as in common parent!
-            if value1 != value2 {
+            if value0 != value1 || value0 != value2 {
                 phi_set.insert((name, value1.clone(), value2.clone()));
             }
         }
 
-        // todo (ext) mention handling nulls - not trivial
+        // todo (ext) readme mention handling nulls - not trivial
         for (name, value1, value2) in phi_set {
             let reg_num = self.fresh_reg_num();
             let reg_type = value1.get_type(); // todo (ext) handle nulls somehow
-            self.get_block(target).phi_set.insert((
+            self.get_block(common_succ).phi_set.insert((
                 reg_num,
                 reg_type.clone(),
                 vec![(value1, br1), (value2, br2)],
             ));
-            self.env
-                .update_local_variable(target, name, ir::Value::Register(reg_num, reg_type));
+            self.env.update_local_variable(
+                common_succ,
+                name,
+                ir::Value::Register(reg_num, reg_type),
+            );
         }
     }
 
