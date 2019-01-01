@@ -26,6 +26,9 @@ $ make
 Podjete decyzje
 ===============
 
+(Odnosnie rozszerzen, nie wszystko co jest napisane w readme,
+jest zaimplementowane w backendzie.)
+
 - zmienilem skladnie dla indeksowania tablicy: `arr.[idx]`
 - nie wspieram rzutowania
 - `for(int x : arr) {...}` jest rownoznaczny:
@@ -34,11 +37,16 @@ int i = 0;
 while (i < arr.length) {
   // zmienna lokalna jedyna w swoim zakresie widocznosci,
   // i w zaleznosci od typu - operujemy na kopii lub referencji
-  int x = arr.[i]; 
+  int x = arr.[i];
   {...}
 }
 ```
 - dopuszczam martwy kod (np. `if (true)` czy `while (false)`)
+- optymalizacja: nie generuje kodu dla martwej galezi if-a ani ciala while'a,
+  jesli warunek petli jest falszywy (obliczam wyrazenia stale, ktore nie
+  zawieraja zmiennych),
+- optymalizacja: nie generuje bloku dla galezi else, jesli nie istnieje ona
+  w kodzie
 - brak sztucznych ograniczen przy wyrazeniach - np. mozna odwolac sie do pola
   obiektu, gdy obiekt jest wynikiem wyrazenia, a nie tylko zmienna, podobnie
   przy tablicach
@@ -56,7 +64,7 @@ void bar() {return foo();}
   tzn. nie mozna miec klasy i globalnej funkcji o tej samej nazwie ani
   pola w klasie i metody o tej samej nazwie,
 - w przypadku dlugiego literalu liczbowego, parser moze sie scrashowac,
-- w metodach, nie ma self, this ani tym podobnych,
+- w metodach, nie ma self, this ani tym podobnych (TODO rozwazyc zmiane),
 - dzielenie przez zero w wyrazeniach stalych jest wykrywane w czasie
   parsowania (mozna dostac syntax error i obok dzielenie przez 0),
 - wystepuja niejawne konwersje: podklasy do nadklasy, oraz nulla do klasy
@@ -70,9 +78,17 @@ int[][] v = new int[][42];
 // v[0] == null // domyslna wartosc
 ```
 - generowany kod jest w postaci SSA: wszystkie zmienne lokalne
-  sa w rejestrach, a load i store uzywane sa wylacznie do danych na stercie
-- optymalizacja: funkcja phi jest uzywana wylacznie do zmiennych, ktorych
-  wartosc ulegla zmianie w trakcie rozgalezienia w grafie przeplywu sterowania
+  sa w rejestrach, a load i store uzywane sa wylacznie do danych na stercie,
+- optymalizacja: funkcje phi w bloku po ifie emituje tylko dla tych zmiennych
+  ktore maja rozne wartosci (stala lub rejestr) w zaleznosci od bloku
+  poprzednika; w przypadku while'a emituje funkcje phi dla wszystkich
+  zmiennych lokalnych (chce uniknac (1) dodatkowej globalnej analizy,
+  jakie zmienne wystepuja, bo to czasochlonne dla programisty,
+  i (2) przechodzenie przez cialo bloku dwukrotnie, bo gdy takie bloki
+  zagniezdzimy to mamy algorytm wykladniczy),
+- optymalizacja: jesli da sie tego uniknac, nie generuje kodu dla ! (negacji
+  logicznej), tzn. w przypadku, gdy wynik decyduje gdzie skoczyc, a nie jest
+  zapisywany na zmienna,
 
 
 Drobne uwagi

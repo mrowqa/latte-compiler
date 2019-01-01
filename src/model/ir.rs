@@ -31,7 +31,8 @@ pub struct GlobalStrNum(pub u32);
 
 pub struct Block {
     pub label: Label,
-    pub phi_set: HashSet<(RegNum, Type, Vec<(Value, Label)>)>,
+    pub phi_set: HashSet<(RegNum, Type, Vec<(Value, Label)>)>, // todo (optional) add string for var name
+    pub predecessors: Vec<Label>,
     pub body: Vec<Operation>,
 }
 
@@ -134,7 +135,10 @@ declare i8*  @_bltn_malloc(i32)
                 r#"@.str.{} = private constant [{} x i8] c"{}\00""#,
                 v.0,
                 k.len() + 1,
-                k.replace("\\", "\\5C").replace("\"", "\\22")
+                k.replace("\\", "\\5C")
+                    .replace("\"", "\\22")
+                    .replace("\n", "\\0A")
+                    .replace("\t", "\\09")
             )?;
         }
         write!(f, "\n\n")?;
@@ -177,7 +181,17 @@ impl fmt::Display for Function {
 
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, ".L{}:", self.label.0)?;
+        write!(f, ".L{}:", self.label.0)?;
+        if self.predecessors.len() > 0 {
+            write!(f, "  ; preds: ")?;
+            for (i, pred_label) in self.predecessors.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "%.L{}", pred_label.0)?;
+            }
+        }
+        writeln!(f, "")?;
 
         for (reg_num, reg_type, vals) in &self.phi_set {
             write!(f, "    %.r{} = phi {} ", reg_num.0, reg_type)?;
