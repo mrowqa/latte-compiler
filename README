@@ -3,22 +3,22 @@ Latte, frontend
 Students, Srodowisko
 ====================
 ```
-  $ rustc --version
+$ rustc --version
 ```
 Lokalnie pracuje z najnowsza wersja (1.31.0), na studentsie mam 1.29.2
 (zainstalowana przed oddaniem instanta) i kod rowniez sie tam kompiluje.
 
-Instalacja Rusta (na wszelki wypadek)::
+Instalacja Rusta (na wszelki wypadek):
 ```
-  $ curl https://sh.rustup.rs -sSf | sh
+$ curl https://sh.rustup.rs -sSf | sh
 ```
-Aktualizacja Rusta::
+Aktualizacja Rusta:
 ```
-  $ rustup update
+$ rustup update
 ```
-Zbudowanie projektu::
+Zbudowanie projektu:
 ```
-  $ make
+$ make
 ```
 `latc` jest skrotem do `latc_llvm --make-executable`.
 
@@ -28,16 +28,16 @@ Podjete decyzje
 
 - zmienilem skladnie dla indeksowania tablicy: `arr.[idx]`
 - nie wspieram rzutowania
-- `for(int x : arr) {...}` jest rownoznaczny::
-  ```
-    int i = 0;
-    while (i < arr.length) {
-      int x = arr.[i]; // jedyna w swoim zakresie widocznosci,
-                      // w zaleznosci od typu -
-                      // operujemy na kopii lub referencji
-      {...}
-    }
-  ```
+- `for(int x : arr) {...}` jest rownoznaczny:
+```
+int i = 0;
+while (i < arr.length) {
+  // zmienna lokalna jedyna w swoim zakresie widocznosci,
+  // i w zaleznosci od typu - operujemy na kopii lub referencji
+  int x = arr.[i]; 
+  {...}
+}
+```
 - dopuszczam martwy kod (np. `if (true)` czy `while (false)`)
 - brak sztucznych ograniczen przy wyrazeniach - np. mozna odwolac sie do pola
   obiektu, gdy obiekt jest wynikiem wyrazenia, a nie tylko zmienna, podobnie
@@ -48,10 +48,10 @@ Podjete decyzje
 - string jest typem referencyjnym, ale nigdy nie jest nullem (domyslnie jest
   napisem pustym),
 - poprawnym jest:
-  ```
-    void foo() {}
-    void bar() {return foo();}
-  ```
+```
+void foo() {}
+void bar() {return foo();}
+```
 - wszelkie symbole (funkcje, zmienne, klasy) wspoldziela przestrzenie nazw,
   tzn. nie mozna miec klasy i globalnej funkcji o tej samej nazwie ani
   pola w klasie i metody o tej samej nazwie,
@@ -63,12 +63,12 @@ Podjete decyzje
   lub tablicy,
 - inkrementacja i dekrementacja (operatory ++ i --) sa zoptymalizowane -
   np. `a[4]++` tylko raz obliczy adres elementu `a[4]`,
-- tablice moga byc wielowymiarowe::
-  ```
-    int[][] v = new int[][42];
-    // typeof(v[0]) == int[]
-    // v[0] == null // domyslna wartosc
-  ```
+- tablice moga byc wielowymiarowe:
+```
+int[][] v = new int[][42];
+// typeof(v[0]) == int[]
+// v[0] == null // domyslna wartosc
+```
 - generowany kod jest w postaci SSA: wszystkie zmienne lokalne
   sa w rejestrach, a load i store uzywane sa wylacznie do danych na stercie
 - optymalizacja: funkcja phi jest uzywana wylacznie do zmiennych, ktorych
