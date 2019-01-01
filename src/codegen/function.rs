@@ -350,7 +350,7 @@ impl<'a> FunctionCodeGen<'a> {
                 Error => unreachable!(),
             }
         }
-        // todo reorder blocks for better LLVM linear code?
+        // todo reorder blocks for better LLVM linear code? (note: add info to README)
 
         cur_label
     }
