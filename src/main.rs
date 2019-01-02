@@ -77,7 +77,7 @@ fn main() {
             println!("Compiling runtime.");
             if !run_command(&[
                 "llc",
-                "-O3",
+                "-O0",
                 "-march=x86",
                 "-filetype=obj",
                 "-o",
@@ -94,7 +94,7 @@ fn main() {
 
         if !run_command(&[
             "llc",
-            "-O3",
+            "-O0",
             "-march=x86",
             "-filetype=obj",
             "-o",
@@ -107,9 +107,8 @@ fn main() {
 
         if run_command(&[
             "gcc",
-            "-O3",
+            "-O0",
             "-m32",
-            "-lreadline",
             "-o",
             exec_output_file.to_str().unwrap(),
             o_output_file.to_str().unwrap(),

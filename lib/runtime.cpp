@@ -1,6 +1,6 @@
-#include <stdio.h>
-#include <readline/readline.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 extern "C" {
 
@@ -19,12 +19,22 @@ void error() {
 
 int readInt() {
     int a;
-    scanf("%d", &a);
+    scanf("%d\n", &a);
     return a;
 }
 
 const char *readString() {
-    return readline(0);
+    char *line = 0;
+    size_t len = 0;
+    size_t read = getline(&line, &len, stdin);
+    if (read <= 0) {
+        return "";
+    }
+
+    if (line[read - 1] == '\n') {
+        line[read - 1] = '\0';
+    }
+    return line;
 }
 
 const char *_bltn_string_concat(const char *a, const char *b) {

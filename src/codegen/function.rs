@@ -171,7 +171,7 @@ impl<'a> FunctionCodeGen<'a> {
             let arg_val = ir::Value::Register(reg_num, arg_type.clone());
             ir_args.push((reg_num, arg_type));
             self.env
-                .update_existing_local_variable(ARGS_LABEL, ast_ident.inner.as_ref(), arg_val);
+                .add_new_local_variable(ARGS_LABEL, ast_ident.inner.as_ref(), arg_val);
         }
 
         let entry_point = self.allocate_new_block(ARGS_LABEL);

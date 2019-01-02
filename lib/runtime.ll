@@ -3,10 +3,16 @@ source_filename = "lib/runtime.cpp"
 target datalayout = "e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128"
 target triple = "i386-pc-linux-gnu"
 
+%struct._IO_FILE = type { i32, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8*, i8*, %struct._IO_marker*, %struct._IO_FILE*, i32, i32, i32, i16, i8, [1 x i8], i8*, i64, %struct._IO_codecvt*, %struct._IO_wide_data*, %struct._IO_FILE*, i8*, i32, i32, [40 x i8] }
+%struct._IO_marker = type opaque
+%struct._IO_codecvt = type opaque
+%struct._IO_wide_data = type opaque
+
 @.str = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
 @.str.1 = private unnamed_addr constant [4 x i8] c"%s\0A\00", align 1
 @.str.2 = private unnamed_addr constant [15 x i8] c"runtime error\0A\00", align 1
-@.str.3 = private unnamed_addr constant [3 x i8] c"%d\00", align 1
+@stdin = external local_unnamed_addr global %struct._IO_FILE*, align 4
+@.str.3 = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
 
 ; Function Attrs: sspstrong
 define dso_local void @printInt(i32) local_unnamed_addr #0 {
@@ -37,7 +43,7 @@ define dso_local i32 @readInt() local_unnamed_addr #0 {
   %1 = alloca i32, align 4
   %2 = bitcast i32* %1 to i8*
   call void @llvm.lifetime.start.p0i8(i64 4, i8* nonnull %2) #11
-  %3 = call i32 (i8*, ...) @scanf(i8* getelementptr inbounds ([3 x i8], [3 x i8]* @.str.3, i32 0, i32 0), i32* nonnull %1) #9
+  %3 = call i32 (i8*, ...) @scanf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str, i32 0, i32 0), i32* nonnull %1) #9
   %4 = load i32, i32* %1, align 4, !tbaa !5
   call void @llvm.lifetime.end.p0i8(i64 4, i8* nonnull %2) #11
   ret i32 %4
@@ -53,11 +59,38 @@ declare void @llvm.lifetime.end.p0i8(i64, i8* nocapture) #4
 
 ; Function Attrs: sspstrong
 define dso_local i8* @readString() local_unnamed_addr #0 {
-  %1 = tail call i8* @readline(i8* null) #9
-  ret i8* %1
-}
+  %1 = alloca i8*, align 4
+  %2 = alloca i32, align 4
+  %3 = bitcast i8** %1 to i8*
+  call void @llvm.lifetime.start.p0i8(i64 4, i8* nonnull %3) #11
+  store i8* null, i8** %1, align 4, !tbaa !9
+  %4 = bitcast i32* %2 to i8*
+  call void @llvm.lifetime.start.p0i8(i64 4, i8* nonnull %4) #11
+  store i32 0, i32* %2, align 4, !tbaa !5
+  %5 = load %struct._IO_FILE*, %struct._IO_FILE** @stdin, align 4, !tbaa !9
+  %6 = call i32 @__getdelim(i8** nonnull %1, i32* nonnull %2, i32 10, %struct._IO_FILE* %5) #9
+  %7 = icmp eq i32 %6, 0
+  br i1 %7, label %16, label %8
 
-declare i8* @readline(i8*) local_unnamed_addr #1
+; <label>:8:                                      ; preds = %0
+  %9 = load i8*, i8** %1, align 4, !tbaa !9
+  %10 = add i32 %6, -1
+  %11 = getelementptr inbounds i8, i8* %9, i32 %10
+  %12 = load i8, i8* %11, align 1, !tbaa !11
+  %13 = icmp eq i8 %12, 10
+  br i1 %13, label %14, label %16
+
+; <label>:14:                                     ; preds = %8
+  store i8 0, i8* %11, align 1, !tbaa !11
+  %15 = load i8*, i8** %1, align 4, !tbaa !9
+  br label %16
+
+; <label>:16:                                     ; preds = %8, %14, %0
+  %17 = phi i8* [ getelementptr inbounds ([1 x i8], [1 x i8]* @.str.3, i32 0, i32 0), %0 ], [ %15, %14 ], [ %9, %8 ]
+  call void @llvm.lifetime.end.p0i8(i64 4, i8* nonnull %4) #11
+  call void @llvm.lifetime.end.p0i8(i64 4, i8* nonnull %3) #11
+  ret i8* %17
+}
 
 ; Function Attrs: nounwind sspstrong
 define dso_local i8* @_bltn_string_concat(i8*, i8*) local_unnamed_addr #5 {
@@ -126,6 +159,8 @@ define dso_local i8* @_bltn_malloc(i32) local_unnamed_addr #0 {
 ; Function Attrs: nounwind
 declare i8* @memset(i8*, i32, i32) local_unnamed_addr #7
 
+declare i32 @__getdelim(i8**, i32*, i32, %struct._IO_FILE*) local_unnamed_addr #1
+
 attributes #0 = { sspstrong "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="pentium4" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #1 = { "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="pentium4" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #2 = { noreturn sspstrong "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="pentium4" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
@@ -153,3 +188,6 @@ attributes #13 = { nobuiltin nounwind }
 !6 = !{!"int", !7, i64 0}
 !7 = !{!"omnipotent char", !8, i64 0}
 !8 = !{!"Simple C++ TBAA"}
+!9 = !{!10, !10, i64 0}
+!10 = !{!"any pointer", !7, i64 0}
+!11 = !{!7, !7, i64 0}

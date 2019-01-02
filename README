@@ -8,6 +8,8 @@ $ rustc --version
 Lokalnie pracuje z najnowsza wersja (1.31.0), na studentsie mam 1.29.2
 (zainstalowana przed oddaniem instanta) i kod rowniez sie tam kompiluje.
 // todo update ^
+// todo wspomnij o pustych blokach w llvm-ie
+// todo core010, r2 dwa razy?
 
 Instalacja Rusta (na wszelki wypadek):
 ```
