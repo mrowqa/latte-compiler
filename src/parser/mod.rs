@@ -1,4 +1,4 @@
-lalrpop_mod!(/*#[allow(clippy::all)]*/ pub latte, "/parser/latte.rs"); // rust 1.29 doesn't know clippy
+lalrpop_mod!(#[allow(clippy::all)] pub latte, "/parser/latte.rs");
 use self::latte::ProgramParser;
 use codemap::CodeMap;
 use frontend_error::{FrontendError, FrontendResult};

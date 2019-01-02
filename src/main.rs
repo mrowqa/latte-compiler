@@ -6,11 +6,12 @@ use std::fs;
 use std::path::Path;
 use std::process;
 
+#[allow(clippy::nonminimal_bool)] // clippy is bugged and signals false positive
 fn main() {
     let args: Vec<_> = env::args().collect();
 
     if !(args.len() == 2 && args[1] != "--make-executable"
-        || (args.len() == 3 && args[1] == "--make-executable"))
+        || args.len() == 3 && args[1] == "--make-executable")
     {
         eprintln!("Usage: {} [--make-executable] <filename.lat>", args[0]);
         process::exit(1);
@@ -133,8 +134,6 @@ fn run_command(cmd: &[&str]) -> bool {
         Err(_) => false,
     }
 }
-// todo test on students
-// todo test against students' tests
 
 // todo (ext) test on students
 // todo (ext) test against official tests

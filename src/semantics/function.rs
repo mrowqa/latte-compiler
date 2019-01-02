@@ -273,11 +273,10 @@ impl<'a> FunctionContext<'a> {
                         Ok(does_ret) => after_ret |= does_ret,
                         Err(err) => errors.extend(err),
                     };
-                    match &cond_expr.inner {
+                    if let InnerExpr::LitBool(ret) = &cond_expr.inner {
                         // while (true) just loops, so we don't have to check if we return after it
                         // while (false) just need to be skipped,
-                        InnerExpr::LitBool(ret) => after_ret |= *ret,
-                        _ => (),
+                        after_ret |= *ret;
                     };
                 }
                 ForEach {

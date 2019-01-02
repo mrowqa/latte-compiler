@@ -251,7 +251,7 @@ impl<'a> ClassDesc<'a> {
                 if result.items.insert(name, t).is_some() {
                     errors.push(FrontendError {
                         err: "Error: class item redefinition".to_string(),
-                        span: span,
+                        span,
                     });
                 }
             };
@@ -299,7 +299,7 @@ impl<'a> ClassDesc<'a> {
                 TypeWrapper::Var(var_type) => {
                     ctx.check_local_var_type(var_type)
                         .accumulate_errors_in(&mut errors);
-                    if let Some(_) = t_in_parent {
+                    if t_in_parent.is_some() {
                         errors.push(FrontendError {
                             err: format!(
                                 "Error: field or method named '{}' already defined in superclass",

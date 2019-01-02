@@ -776,9 +776,9 @@ impl<'a> FunctionCodeGen<'a> {
         &mut self,
         pred_label: ir::Label,
         cond_label: ir::Label,
-    ) -> Box<Vec<(&'a str, ir::Value, ir::Value)>> {
+    ) -> Vec<(&'a str, ir::Value, ir::Value)> {
         let names = self.env.get_all_visible_local_variables(pred_label);
-        let mut stub_info = Box::new(vec![]);
+        let mut stub_info = vec![];
 
         for name in names {
             let value = match self.env.get_variable(pred_label, name) {
@@ -801,7 +801,7 @@ impl<'a> FunctionCodeGen<'a> {
         pred_label: ir::Label,
         cond_label: ir::Label,
         proxy_label: Option<ir::Label>,
-        stub_info: Box<Vec<(&'a str, ir::Value, ir::Value)>>,
+        stub_info: Vec<(&'a str, ir::Value, ir::Value)>,
     ) {
         let end_body_label = {
             let preds = &self.get_block(cond_label).predecessors;
@@ -817,7 +817,7 @@ impl<'a> FunctionCodeGen<'a> {
             }
         };
 
-        for (name, value1, phi_value) in *stub_info {
+        for (name, value1, phi_value) in stub_info {
             let mut phi_vec = vec![(value1, pred_label)];
             if end_body_label != UNREACHABLE_LABEL {
                 // this is really tricky; we need to lookup proxy_label, not

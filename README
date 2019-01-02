@@ -5,9 +5,9 @@ Students, Srodowisko
 ```
 $ rustc --version
 ```
-Lokalnie pracuje z najnowsza wersja (1.31.1), na studentsie mam 1.29.2
-(zainstalowana przed oddaniem instanta) i kod rowniez sie tam kompiluje.
-// todo update (po testach na studentsie) ^
+Lokalnie pracuje z najnowsza wersja (1.31.1). Zalecana jest aktualizacja
+kompilatora (nie trwa to dlugo), poniewaz moj kod miejscami korzysta
+z niedawnych zmian w kompilatorze Rusta.
 
 Instalacja Rusta (na wszelki wypadek):
 ```
@@ -23,6 +23,8 @@ $ make
 ```
 `latc` jest skrotem do `latc_llvm --make-executable`.
 
+Uruchamialem u siebie lokalnie testy oficjalne i te dodatkowe od studentow -
+wszystko dziala tak, jak powinno.
 
 Podjete decyzje
 ===============
@@ -65,7 +67,7 @@ void bar() {return foo();}
   tzn. nie mozna miec klasy i globalnej funkcji o tej samej nazwie ani
   pola w klasie i metody o tej samej nazwie,
 - w przypadku dlugiego literalu liczbowego, parser moze sie scrashowac,
-- w metodach, nie ma self, this ani tym podobnych (TODO rozwazyc zmiane),
+- w metodach, nie ma self, this ani tym podobnych (TODO (ext) rozwazyc zmiane),
 - dzielenie przez zero w wyrazeniach stalych jest wykrywane w czasie
   parsowania (mozna dostac syntax error i obok dzielenie przez 0),
 - wystepuja niejawne konwersje: podklasy do nadklasy, oraz nulla do klasy
@@ -103,7 +105,6 @@ Drobne uwagi
   wiec recznie je usuwam przed przekazaniem kodu do parsera (testowalem,
   ale zawsze moglem cos przeoczyc),
 - staram sie wypisac tyle bledow na raz ile sie da,
-- uruchamialem testy przykladowe i studentow - wszystko dziala jak powinno,
 - 1 pkt za SSA to zdecydowanie za malo; llvm duzo wymaga od IR-u, przez co
   zaimplementowanie wszystkich zmiennych lokalnych na funkcjach phi wymagalo
   duzo nowego kodu, aby kompilator llvm-a byl zadowolony

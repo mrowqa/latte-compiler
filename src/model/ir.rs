@@ -31,10 +31,11 @@ pub struct GlobalStrNum(pub u32);
 
 pub struct Block {
     pub label: Label,
-    pub phi_set: HashSet<(RegNum, Type, Vec<(Value, Label)>)>, // todo (optional) add string for var name
+    pub phi_set: HashSet<PhiEntry>,
     pub predecessors: Vec<Label>,
     pub body: Vec<Operation>,
 }
+pub type PhiEntry = (RegNum, Type, Vec<(Value, Label)>); // todo (optional) add string for var name
 
 // almost-quadruple code
 // read left-to-right, like in LLVM
@@ -115,7 +116,6 @@ impl fmt::Display for Program {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{}",
             r#"declare void @printInt(i32)
 declare void @printString(i8*)
 declare void @error()
@@ -182,7 +182,7 @@ impl fmt::Display for Function {
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, ".L{}:", self.label.0)?;
-        if self.predecessors.len() > 0 {
+        if !self.predecessors.is_empty() {
             write!(f, "  ; preds: ")?;
             for (i, pred_label) in self.predecessors.iter().enumerate() {
                 if i > 0 {
@@ -191,7 +191,7 @@ impl fmt::Display for Block {
                 write!(f, "%.L{}", pred_label.0)?;
             }
         }
-        writeln!(f, "")?;
+        writeln!(f)?;
 
         for (reg_num, reg_type, vals) in &self.phi_set {
             write!(f, "    %.r{} = phi {} ", reg_num.0, reg_type)?;
@@ -201,7 +201,7 @@ impl fmt::Display for Block {
                 }
                 write!(f, "[{}, %.L{}]", value, label.0)?;
             }
-            writeln!(f, "")?;
+            writeln!(f)?;
         }
 
         for op in &self.body {
