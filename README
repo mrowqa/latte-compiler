@@ -7,6 +7,7 @@ $ rustc --version
 ```
 Lokalnie pracuje z najnowsza wersja (1.31.0), na studentsie mam 1.29.2
 (zainstalowana przed oddaniem instanta) i kod rowniez sie tam kompiluje.
+// todo update ^
 
 Instalacja Rusta (na wszelki wypadek):
 ```
@@ -43,8 +44,8 @@ while (i < arr.length) {
 ```
 - dopuszczam martwy kod (np. `if (true)` czy `while (false)`)
 - optymalizacja: nie generuje kodu dla martwej galezi if-a ani ciala while'a,
-  jesli warunek petli jest falszywy (obliczam wyrazenia stale, ktore nie
-  zawieraja zmiennych),
+  jesli warunek petli jest falszywy, ani kodu po `while (true)` (obliczam
+  wyrazenia stale, ktore nie zawieraja zmiennych),
 - optymalizacja: nie generuje bloku dla galezi else, jesli nie istnieje ona
   w kodzie
 - brak sztucznych ograniczen przy wyrazeniach - np. mozna odwolac sie do pola
@@ -69,8 +70,8 @@ void bar() {return foo();}
   parsowania (mozna dostac syntax error i obok dzielenie przez 0),
 - wystepuja niejawne konwersje: podklasy do nadklasy, oraz nulla do klasy
   lub tablicy,
-- inkrementacja i dekrementacja (operatory ++ i --) sa zoptymalizowane -
-  np. `a[4]++` tylko raz obliczy adres elementu `a[4]`,
+- optymalizacja: inkrementacja i dekrementacja (operatory ++ i --)
+  np. `a.[4]++` tylko raz obliczy adres elementu `a.[4]`,
 - tablice moga byc wielowymiarowe:
 ```
 int[][] v = new int[][42];

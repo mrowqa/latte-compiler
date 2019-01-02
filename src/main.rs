@@ -135,5 +135,4 @@ fn run_command(cmd: &[&str]) -> bool {
     }
 }
 // todo test on students
-// todo describe used libs in readme
 // todo test against official tests

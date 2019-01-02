@@ -54,12 +54,36 @@ impl<'a> Env<'a> {
         );
     }
 
-    pub fn update_local_variable(&mut self, frame: ir::Label, name: &'a str, value: ir::Value) {
-        self.frames
+    pub fn add_new_local_variable(&mut self, frame: ir::Label, name: &'a str, value: ir::Value) {
+        let old_val = self
+            .frames
             .get_mut(&frame)
             .unwrap()
             .locals
             .insert(name, value);
+        match old_val {
+            None => (),
+            Some(_) => unreachable!(), // assert
+        }
+    }
+
+    pub fn update_existing_local_variable(
+        &mut self,
+        frame: ir::Label,
+        name: &'a str,
+        value: ir::Value,
+    ) {
+        let mut it = Some(frame);
+        while let Some(frame) = it {
+            let frame = self.frames.get_mut(&frame).unwrap();
+            if frame.locals.contains_key(name) {
+                frame.locals.insert(name, value);
+                return;
+            } else {
+                it = frame.parent;
+            }
+        }
+        unreachable!();
     }
 
     pub fn get_variable(&self, frame: ir::Label, name: &'a str) -> ValueWrapper {
@@ -147,7 +171,7 @@ impl<'a> FunctionCodeGen<'a> {
             let arg_val = ir::Value::Register(reg_num, arg_type.clone());
             ir_args.push((reg_num, arg_type));
             self.env
-                .update_local_variable(ARGS_LABEL, ast_ident.inner.as_ref(), arg_val);
+                .update_existing_local_variable(ARGS_LABEL, ast_ident.inner.as_ref(), arg_val);
         }
 
         let entry_point = self.allocate_new_block(ARGS_LABEL);
@@ -185,10 +209,13 @@ impl<'a> FunctionCodeGen<'a> {
             match &stmt.inner {
                 Empty => (),
                 Block(bl) => {
-                    cur_label = self.process_block(bl, cur_label, true);
-                    if cur_label == UNREACHABLE_LABEL {
+                    let end_block_label = self.process_block(bl, cur_label, true);
+                    if end_block_label == UNREACHABLE_LABEL {
                         return UNREACHABLE_LABEL;
                     }
+                    let cont_label = self.allocate_new_block(cur_label);
+                    self.add_branch1_op(end_block_label, cont_label);
+                    cur_label = cont_label;
                 }
                 Decl {
                     var_type,
@@ -215,7 +242,7 @@ impl<'a> FunctionCodeGen<'a> {
                         };
                         // todo (ext) handle nulls
                         self.env
-                            .update_local_variable(cur_label, var_name.inner.as_ref(), value)
+                            .add_new_local_variable(cur_label, var_name.inner.as_ref(), value)
                     }
                 }
                 Assign(lhs, rhs) => {
@@ -224,7 +251,8 @@ impl<'a> FunctionCodeGen<'a> {
                     cur_label = new_label;
                     match &lhs.inner {
                         ast::InnerExpr::LitVar(var_name) => {
-                            self.env.update_local_variable(cur_label, &var_name, value);
+                            self.env
+                                .update_existing_local_variable(cur_label, &var_name, value);
                         }
                         _ => unimplemented!(), // todo (ext)
                     };
@@ -248,7 +276,7 @@ impl<'a> FunctionCodeGen<'a> {
                                 .push(ir::Operation::Arithmetic(new_reg, op, val_l, val_r));
                             let val_res = ir::Value::Register(new_reg, ir::Type::Int);
                             self.env
-                                .update_local_variable(cur_label, &var_name, val_res);
+                                .update_existing_local_variable(cur_label, &var_name, val_res);
                         }
                         _ => unimplemented!(), // todo (ext)
                     };
@@ -279,7 +307,6 @@ impl<'a> FunctionCodeGen<'a> {
                             return UNREACHABLE_LABEL;
                         }
                         let cont_label = self.allocate_new_block(cur_label);
-                        // todo update appropriate variables (new_var && update_var in env??)
                         self.add_branch1_op(end_true_label, cont_label);
                         cur_label = cont_label;
                     }
@@ -290,7 +317,6 @@ impl<'a> FunctionCodeGen<'a> {
                                 return UNREACHABLE_LABEL;
                             }
                             let cont_label = self.allocate_new_block(cur_label);
-                            // todo as above
                             self.add_branch1_op(end_false_label, cont_label);
                             cur_label = cont_label;
                         }
@@ -341,9 +367,19 @@ impl<'a> FunctionCodeGen<'a> {
                     },
                 },
                 While(cond, block) => match &cond.inner {
-                    //todo bugfix while(true) -- frontend allows it (test zzz.ll) + add it to README
-                    //ast::InnerExpr::LitBool(true) => {} // todo (optional) some UNREACHABLE_LABEL (?) for not generating dead code? or unreachable llvm instruction?
                     ast::InnerExpr::LitBool(false) => (),
+                    ast::InnerExpr::LitBool(true) => {
+                        let body_label = self.allocate_new_block(cur_label);
+                        let stub_info =
+                            self.prepare_env_and_stub_phi_set_for_loop_cond(cur_label, body_label);
+                        self.add_branch1_op(cur_label, body_label);
+                        let mut end_body_label = self.process_block(block, body_label, false);
+                        if end_body_label != UNREACHABLE_LABEL {
+                            self.add_branch1_op(end_body_label, body_label);
+                        }
+                        self.finalize_phi_set_for_loop_cond(cur_label, body_label, stub_info);
+                        return UNREACHABLE_LABEL;
+                    }
                     expr => {
                         let cond_label = self.allocate_new_block(cur_label);
                         let stub_info =
@@ -371,10 +407,9 @@ impl<'a> FunctionCodeGen<'a> {
                 Error => unreachable!(),
             }
         }
-        // [!] todo reorder blocks for better LLVM linear code? (note: add info to README)
+        // todo (optional) reorder blocks for better LLVM linear code? (note: add info to README)
         // todo (optional) expressions / statements from code in comments (extract from AST)
         // todo (optional) remove empty blocks
-        // todo name overshadowing
 
         cur_label
     }
@@ -653,7 +688,8 @@ impl<'a> FunctionCodeGen<'a> {
                     ));
                     ir::Value::Register(reg_num, reg_type)
                 };
-                self.env.update_local_variable(common_succ, name, new_value);
+                self.env
+                    .update_existing_local_variable(common_succ, name, new_value);
             }
         }
     }
@@ -675,7 +711,8 @@ impl<'a> FunctionCodeGen<'a> {
             let reg_num = self.get_new_reg_num();
             let phi_value = ir::Value::Register(reg_num, value.get_type());
             stub_info.push((name, value, phi_value.clone()));
-            self.env.update_local_variable(cond_label, name, phi_value);
+            self.env
+                .update_existing_local_variable(cond_label, name, phi_value);
         }
 
         stub_info
