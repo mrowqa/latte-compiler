@@ -134,4 +134,8 @@ fn run_command(cmd: &[&str]) -> bool {
     }
 }
 // todo test on students
-// todo test against official tests
+// todo test against students' tests
+
+// todo (ext) test on students
+// todo (ext) test against official tests
+// todo (ext) test against students' tests

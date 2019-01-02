@@ -5,11 +5,9 @@ Students, Srodowisko
 ```
 $ rustc --version
 ```
-Lokalnie pracuje z najnowsza wersja (1.31.0), na studentsie mam 1.29.2
+Lokalnie pracuje z najnowsza wersja (1.31.1), na studentsie mam 1.29.2
 (zainstalowana przed oddaniem instanta) i kod rowniez sie tam kompiluje.
-// todo update ^
-// todo wspomnij o pustych blokach w llvm-ie
-// todo core010, r2 dwa razy?
+// todo update (po testach na studentsie) ^
 
 Instalacja Rusta (na wszelki wypadek):
 ```
@@ -92,6 +90,10 @@ int[][] v = new int[][42];
 - optymalizacja: jesli da sie tego uniknac, nie generuje kodu dla ! (negacji
   logicznej), tzn. w przypadku, gdy wynik decyduje gdzie skoczyc, a nie jest
   zapisywany na zmienna,
+- w kodzie LLVM-a tworze nowe bloki dla syntaktycznych blokow w kodzie Latte
+  (uwaga: petle i ify maja u mnie blok w AST, a nie instrukcje - nawet jesli
+  w tekscie programu nie ma znakow {}), stad w grafie przeplywu sterowania
+  moze wystepowac w wygenerowanym kodzie dluga sciezka bez rozgalezien,
 
 
 Drobne uwagi
@@ -101,7 +103,10 @@ Drobne uwagi
   wiec recznie je usuwam przed przekazaniem kodu do parsera (testowalem,
   ale zawsze moglem cos przeoczyc),
 - staram sie wypisac tyle bledow na raz ile sie da,
-- uruchamialem testy przykladowe i studentow - wszystko dziala jak powinno
+- uruchamialem testy przykladowe i studentow - wszystko dziala jak powinno,
+- 1 pkt za SSA to zdecydowanie za malo; llvm duzo wymaga od IR-u, przez co
+  zaimplementowanie wszystkich zmiennych lokalnych na funkcjach phi wymagalo
+  duzo nowego kodu, aby kompilator llvm-a byl zadowolony
 
 
 Opis kompilacji runtime'u znajduje sie w `compile-runtime.sh`

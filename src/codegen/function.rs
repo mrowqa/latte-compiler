@@ -6,6 +6,7 @@ struct Env<'a> {
     global_ctx: &'a GlobalContext<'a>,
     class_ctx: Option<&'a ClassDesc<'a>>,
     frames: HashMap<ir::Label, EnvFrame<'a>>,
+    next_proxy_frame: ir::Label,
 }
 
 struct EnvFrame<'a> {
@@ -41,17 +42,22 @@ impl<'a> Env<'a> {
             global_ctx: gctx,
             class_ctx: cctx,
             frames,
+            next_proxy_frame: ir::Label(std::u32::MAX - 42), // some arbitrary big label
         }
     }
 
     pub fn allocate_new_frame(&mut self, label: ir::Label, parent_label: ir::Label) {
-        self.frames.insert(
+        let old_frame = self.frames.insert(
             label,
             EnvFrame {
                 parent: Some(parent_label),
                 locals: HashMap::new(),
             },
         );
+        match old_frame {
+            None => (),
+            Some(_) => unreachable!(), // assert
+        }
     }
 
     pub fn add_new_local_variable(&mut self, frame: ir::Label, name: &'a str, value: ir::Value) {
@@ -84,6 +90,58 @@ impl<'a> Env<'a> {
             }
         }
         unreachable!();
+    }
+
+    // proxy env should be applied later for correct visibility
+    pub fn create_proxy_env(&mut self, frame_label: ir::Label) -> ir::Label {
+        // loop body would modify mapping (name -> value in phi set) in condition block
+        // - we want to avoid that, since body after loop needs value from this phi set
+        let names = self.get_all_visible_local_variables(frame_label);
+        let proxy_frame_label = self.insert_proxy_frame(frame_label);
+        for n in names {
+            let value = match self.get_variable(frame_label, n) {
+                ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
+                ValueWrapper::ClassValue(_) => unreachable!(),
+            };
+            self.frames
+                .get_mut(&proxy_frame_label)
+                .unwrap()
+                .locals
+                .insert(n, value);
+        }
+
+        proxy_frame_label
+    }
+
+    fn insert_proxy_frame(&mut self, frame_label: ir::Label) -> ir::Label {
+        let proxy_frame_label = self.next_proxy_frame;
+        self.next_proxy_frame.0 -= 1;
+
+        // block needed to satisfy borrow checker
+        let parent = {
+            let frame = self.frames.get_mut(&frame_label).unwrap();
+            let parent = frame.parent.unwrap();
+            frame.parent = Some(proxy_frame_label);
+            parent
+        };
+        self.allocate_new_frame(proxy_frame_label, parent);
+
+        proxy_frame_label
+    }
+
+    pub fn apply_proxy_env(&mut self, proxy: ir::Label, target: ir::Label) {
+        let names = self.get_all_visible_local_variables(proxy);
+        for n in names {
+            let value = match self.get_variable(proxy, n) {
+                ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
+                ValueWrapper::ClassValue(_) => unreachable!(),
+            };
+            self.frames
+                .get_mut(&target)
+                .unwrap()
+                .locals
+                .insert(n, value);
+        }
     }
 
     pub fn get_variable(&self, frame: ir::Label, name: &'a str) -> ValueWrapper {
@@ -139,8 +197,6 @@ impl<'a> Env<'a> {
 }
 
 pub struct FunctionCodeGen<'a> {
-    // global_ctx: &'a GlobalContext<'a>,
-    // class_ctx: Option<&'a ClassDesc<'a>>,
     global_strings: &'a mut HashMap<String, ir::GlobalStrNum>,
     env: Env<'a>,
     blocks: Vec<ir::Block>,
@@ -154,8 +210,6 @@ impl<'a> FunctionCodeGen<'a> {
         global_strings: &'a mut HashMap<String, ir::GlobalStrNum>,
     ) -> Self {
         FunctionCodeGen {
-            // class_ctx: cctx,
-            // global_ctx: gctx,
             global_strings,
             env: Env::new(gctx, cctx),
             blocks: vec![],
@@ -327,10 +381,17 @@ impl<'a> FunctionCodeGen<'a> {
                             let true_label = self.allocate_new_block(cur_label);
                             let cont_label = self.allocate_new_block(cur_label);
                             self.process_expression_cond(&expr, cur_label, true_label, cont_label);
+                            let true_proxy_label = self.env.create_proxy_env(true_label);
                             let end_true_label = self.process_block(true_branch, true_label, false);
                             if end_true_label != UNREACHABLE_LABEL {
                                 self.add_branch1_op(end_true_label, cont_label);
-                                self.calculate_phi_set_for_if(cur_label, cont_label);
+                                self.calculate_phi_set_for_if(
+                                    cur_label,
+                                    cont_label,
+                                    (end_true_label, true_proxy_label),
+                                    (cur_label, cur_label),
+                                );
+                                // phi set calculation applies proxy env properly
                             }
                             cur_label = cont_label;
                         }
@@ -338,6 +399,8 @@ impl<'a> FunctionCodeGen<'a> {
                             let true_label = self.allocate_new_block(cur_label);
                             let false_label = self.allocate_new_block(cur_label);
                             self.process_expression_cond(&expr, cur_label, true_label, false_label);
+                            let true_proxy_label = self.env.create_proxy_env(true_label);
+                            let false_proxy_label = self.env.create_proxy_env(false_label);
                             let end_true_label = self.process_block(true_branch, true_label, false);
                             let end_false_label = self.process_block(bl, false_label, false);
                             match (
@@ -348,18 +411,26 @@ impl<'a> FunctionCodeGen<'a> {
                                 (true, false) => {
                                     let cont_label = self.allocate_new_block(cur_label);
                                     self.add_branch1_op(end_false_label, cont_label);
+                                    self.env.apply_proxy_env(false_proxy_label, cont_label);
                                     cur_label = cont_label;
                                 }
                                 (false, true) => {
                                     let cont_label = self.allocate_new_block(cur_label);
                                     self.add_branch1_op(end_true_label, cont_label);
+                                    self.env.apply_proxy_env(true_proxy_label, cont_label);
                                     cur_label = cont_label;
                                 }
                                 (false, false) => {
                                     let cont_label = self.allocate_new_block(cur_label);
                                     self.add_branch1_op(end_false_label, cont_label);
                                     self.add_branch1_op(end_true_label, cont_label);
-                                    self.calculate_phi_set_for_if(cur_label, cont_label);
+                                    self.calculate_phi_set_for_if(
+                                        cur_label,
+                                        cont_label,
+                                        (end_true_label, true_proxy_label),
+                                        (end_false_label, false_proxy_label),
+                                    );
+                                    // phi calculations applies proxy correctly
                                     cur_label = cont_label;
                                 }
                             }
@@ -377,7 +448,7 @@ impl<'a> FunctionCodeGen<'a> {
                         if end_body_label != UNREACHABLE_LABEL {
                             self.add_branch1_op(end_body_label, body_label);
                         }
-                        self.finalize_phi_set_for_loop_cond(cur_label, body_label, stub_info);
+                        self.finalize_phi_set_for_loop_cond(cur_label, body_label, None, stub_info);
                         return UNREACHABLE_LABEL;
                     }
                     expr => {
@@ -389,13 +460,19 @@ impl<'a> FunctionCodeGen<'a> {
                         // can't be changed further in condition block
                         let body_label = self.allocate_new_block(cond_label);
                         let cont_label = self.allocate_new_block(cond_label);
+                        let proxy_label = self.env.create_proxy_env(body_label);
                         self.add_branch1_op(cur_label, cond_label);
                         self.process_expression_cond(expr, cond_label, body_label, cont_label);
                         let mut end_body_label = self.process_block(block, body_label, false);
                         if end_body_label != UNREACHABLE_LABEL {
                             self.add_branch1_op(end_body_label, cond_label);
                         }
-                        self.finalize_phi_set_for_loop_cond(cur_label, cond_label, stub_info);
+                        self.finalize_phi_set_for_loop_cond(
+                            cur_label,
+                            cond_label,
+                            Some(proxy_label),
+                            stub_info,
+                        );
                         cur_label = cont_label;
                     }
                 },
@@ -651,25 +728,25 @@ impl<'a> FunctionCodeGen<'a> {
         }
     }
 
-    fn calculate_phi_set_for_if(&mut self, common_pred: ir::Label, common_succ: ir::Label) {
-        let (br1, br2) = {
-            let preds = &self.get_block(common_succ).predecessors;
-            assert_eq!(preds.len(), 2); // it's easier to operate on this
-            (preds[0], preds[1])
-        };
-        let names1 = self.env.get_all_visible_local_variables(br1);
-        let names2 = self.env.get_all_visible_local_variables(br2);
+    fn calculate_phi_set_for_if(
+        &mut self,
+        common_pred: ir::Label,
+        common_succ: ir::Label,
+        (br1, br1_proxy): (ir::Label, ir::Label),
+        (br2, br2_proxy): (ir::Label, ir::Label),
+    ) {
+        let names = self.env.get_all_visible_local_variables(common_pred);
 
-        for name in names2.union(&names1) {
+        for name in names {
             let value0 = match self.env.get_variable(common_pred, name) {
                 ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
                 ValueWrapper::ClassValue(_) => unreachable!(),
             };
-            let value1 = match self.env.get_variable(br1, name) {
+            let value1 = match self.env.get_variable(br1_proxy, name) {
                 ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
                 ValueWrapper::ClassValue(_) => unreachable!(),
             };
-            let value2 = match self.env.get_variable(br2, name) {
+            let value2 = match self.env.get_variable(br2_proxy, name) {
                 ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
                 ValueWrapper::ClassValue(_) => unreachable!(),
             };
@@ -723,6 +800,7 @@ impl<'a> FunctionCodeGen<'a> {
         &mut self,
         pred_label: ir::Label,
         cond_label: ir::Label,
+        proxy_label: Option<ir::Label>,
         stub_info: Box<Vec<(&'a str, ir::Value, ir::Value)>>,
     ) {
         let end_body_label = {
@@ -742,7 +820,11 @@ impl<'a> FunctionCodeGen<'a> {
         for (name, value1, phi_value) in *stub_info {
             let mut phi_vec = vec![(value1, pred_label)];
             if end_body_label != UNREACHABLE_LABEL {
-                let value2 = match self.env.get_variable(end_body_label, name) {
+                // this is really tricky; we need to lookup proxy_label, not
+                // end_body_label, so we will not confuse new variables
+                // defined in body loop which shadows original ones
+                let proxy_label = proxy_label.unwrap();
+                let value2 = match self.env.get_variable(proxy_label, name) {
                     ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
                     ValueWrapper::ClassValue(_) => unreachable!(),
                 };
