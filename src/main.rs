@@ -79,7 +79,7 @@ fn main() {
             if !run_command(&[
                 "llc",
                 "-O0",
-                "-march=x86",
+                "-march=x86-64",
                 "-filetype=obj",
                 "-o",
                 o_runtime.to_str().unwrap(),
@@ -96,7 +96,7 @@ fn main() {
         if !run_command(&[
             "llc",
             "-O0",
-            "-march=x86",
+            "-march=x86-64",
             "-filetype=obj",
             "-o",
             o_output_file.to_str().unwrap(),
@@ -108,8 +108,8 @@ fn main() {
 
         if run_command(&[
             "gcc",
+            "-no-pie",
             "-O0",
-            "-m32",
             "-o",
             exec_output_file.to_str().unwrap(),
             o_output_file.to_str().unwrap(),

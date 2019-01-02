@@ -26,6 +26,13 @@ $ make
 Uruchamialem u siebie lokalnie testy oficjalne i te dodatkowe od studentow -
 wszystko dziala tak, jak powinno.
 
+Runtime zostal napisany w C/C++ i znajduje sie w lib/runtime.cpp. Jest on
+juz skompilowany do plikow *.ll i *.bc przy pomocy clanga. Sposob jego
+kompilacji znajduje sie w `compile-runtime.sh`.
+
+Na studentsie niestety nie ma zainstalowanych biblioteki standardowej C
+32-bitowej, na ktorych pracowalem lokalnie, wiec produkuje binarki 64-bitowe.
+
 Podjete decyzje
 ===============
 
