@@ -319,8 +319,31 @@ AddOp: BinaryOp = {
 String: String = {
     r#""([^\\"]|\\[\\"nt])*""# => {
         let string = &<>[1..<>.len() - 1];
-        string.replace(r"\n", "\n").replace(r"\t", "\t")
-            .replace(r"\\", r"\").replace(r#"\""#, "\"")
+        let mut new_string = String::new();
+        let mut escaped = false;
+        for ch in string.chars() {
+            match (escaped, ch) {
+                (true, 't') => {
+                    escaped = false;
+                    new_string.push('\t');
+                },
+                (true, 'n') => {
+                    escaped = false;
+                    new_string.push('\n');
+                },
+                (true, _) => {
+                    escaped = false;
+                    new_string.push(ch);
+                },
+                (false, '\\') => {
+                    escaped = true;
+                },
+                (false, _) => {
+                    new_string.push(ch);
+                }
+            }
+        }
+        new_string
     }
 };
 
