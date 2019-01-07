@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cctype>
 
 extern "C" {
 
@@ -18,9 +19,30 @@ void error() {
 }
 
 int readInt() {
-    int a;
-    scanf("%d\n", &a);
-    return a;
+    char *line = 0;
+    size_t len = 0;
+    size_t read = getline(&line, &len, stdin);
+    if (read <= 0) {
+        error();
+    }
+
+    char *ptr = line;
+    while (ptr < line+read && isspace(*ptr)) ptr++;
+    if (ptr < line+read && *ptr == '-') ptr++;
+    else if (ptr < line+read && *ptr == '+') ptr++;
+    while (ptr < line+read && isspace(*ptr)) ptr++;
+    if (!(ptr < line+read && isdigit(*ptr))) {
+        error();
+    }
+    while (ptr < line+read && isdigit(*ptr)) ptr++;
+    while (ptr < line+read && isspace(*ptr)) ptr++;
+    if (ptr != line + read) {
+        error();
+    }
+
+    int num = atoi(line);
+    free(line);
+    return num;
 }
 
 const char *readString() {

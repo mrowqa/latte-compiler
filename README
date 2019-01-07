@@ -70,6 +70,9 @@ while (i < arr.length) {
 void foo() {}
 void bar() {return foo();}
 ```
+- funkcje z runtime'u moga wywolac funkcje error() w przypadku wystapienia
+  bledu, m.in. niepoprawnego formatu liczby czy ujemnej ilosci pamieci
+  do zaalokowania,
 - wszelkie symbole (funkcje, zmienne, klasy) wspoldziela przestrzenie nazw,
   tzn. nie mozna miec klasy i globalnej funkcji o tej samej nazwie ani
   pola w klasie i metody o tej samej nazwie,
