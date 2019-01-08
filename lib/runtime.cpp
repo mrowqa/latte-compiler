@@ -10,7 +10,7 @@ void printInt(int a) {
 }
 
 void printString(const char *a) {
-    printf("%s\n", a);
+    printf("%s\n", a ? a : "");
 }
 
 void error() {
@@ -50,7 +50,7 @@ const char *readString() {
     size_t len = 0;
     size_t read = getline(&line, &len, stdin);
     if (read <= 0) {
-        return "";
+        return nullptr;
     }
 
     if (line[read - 1] == '\n') {
@@ -60,6 +60,13 @@ const char *readString() {
 }
 
 const char *_bltn_string_concat(const char *a, const char *b) {
+    if (!a) {
+        return b;
+    }
+    if (!b) {
+        return a;
+    }
+
     size_t buf_size = strlen(a) + strlen(b) + 1;
     char *ptr = (char*) malloc(buf_size);
     strcpy(ptr, a);
@@ -68,15 +75,22 @@ const char *_bltn_string_concat(const char *a, const char *b) {
 }
 
 bool _bltn_string_eq(const char *a, const char *b) {
+    if (!a && !b) {
+        return true;
+    }
+    if (!a || !b) {
+        return false;
+    }
+
     return strcmp(a, b) == 0;
 }
 
 bool _bltn_string_ne(const char *a, const char *b) {
-    return strcmp(a, b) != 0;
+    return !_bltn_string_eq(a, b);
 }
 
 void *_bltn_malloc(int size) {
-    if (size < 0) {
+    if (size <= 0) {
         error();
     }
     void *ptr = malloc(size);
@@ -85,6 +99,19 @@ void *_bltn_malloc(int size) {
     }
     memset(ptr, 0, size);
     return ptr;
+}
+
+void *_bltn_alloc_array(int elem_cnt, int elem_size) {
+    static_assert(sizeof(int) == 4, "sizeof(int) == 4");
+    if (elem_cnt <= 0 || elem_size <= 0) { // todo readme <-- alokacja co najmniej 1 bajtu
+        error();
+    }
+
+    int header_size = sizeof(int);
+    int size = elem_cnt * elem_size + header_size;
+    int *header_ptr = static_cast<int*>(_bltn_malloc(size));
+    *header_ptr = elem_cnt;
+    return header_ptr + 1;
 }
 
 }

@@ -33,6 +33,7 @@ kompilacji znajduje sie w `compile-runtime.sh`.
 Na studentsie niestety nie ma zainstalowanych biblioteki standardowej C
 32-bitowej, na ktorych pracowalem lokalnie, wiec produkuje binarki 64-bitowe.
 
+
 Podjete decyzje
 ===============
 
@@ -63,8 +64,9 @@ while (i < arr.length) {
 - programista odpowiada za weryfikacje, czy referencja do obiektu lub tablicy
   nie jest nullem, wpp. zachowanie jest niezdefiniowane (prawdopodobnie bedzie
   segfault),
-- string jest typem referencyjnym, ale nigdy nie jest nullem (domyslnie jest
-  napisem pustym),
+- string jest typem referencyjnym, ale semantycznie nigdy nie jest nullem
+  (domyslnie jest napisem pustym); jednakze napis pusty moze byc
+  reprezentowany w implementacji przez wskaznik na adres 0,
 - poprawnym jest:
 ```
 void foo() {}
@@ -106,6 +108,13 @@ int[][] v = new int[][42];
   (uwaga: petle i ify maja u mnie blok w AST, a nie instrukcje - nawet jesli
   w tekscie programu nie ma znakow {}), stad w grafie przeplywu sterowania
   moze wystepowac w wygenerowanym kodzie dluga sciezka bez rozgalezien,
+- kompiluje na architekture 64-bitowa (maszyna students nie ma 32-bitowego
+  runtime'u libc uzywanego przez clanga),
+- dla zgrabniejszego generowanego kodu LLVM, recznie obliczam rozmiar typow
+  (mniej zgrabnie mozna zrobic "getelementptr null, 1" i potem zrzutowac na
+  inta); zakladam domyslny DataLayout,
+// todo emit data layout, just in case
+// todo describe arrays details
 
 
 Drobne uwagi

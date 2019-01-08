@@ -10,9 +10,9 @@ target triple = "x86_64-pc-linux-gnu"
 
 @.str = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
 @.str.1 = private unnamed_addr constant [4 x i8] c"%s\0A\00", align 1
-@.str.2 = private unnamed_addr constant [15 x i8] c"runtime error\0A\00", align 1
+@.str.2 = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
+@.str.3 = private unnamed_addr constant [15 x i8] c"runtime error\0A\00", align 1
 @stdin = external local_unnamed_addr global %struct._IO_FILE*, align 8
-@.str.3 = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
 
 ; Function Attrs: sspstrong uwtable
 define dso_local void @printInt(i32) local_unnamed_addr #0 {
@@ -24,13 +24,15 @@ declare i32 @printf(i8*, ...) local_unnamed_addr #1
 
 ; Function Attrs: sspstrong uwtable
 define dso_local void @printString(i8*) local_unnamed_addr #0 {
-  %2 = tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str.1, i64 0, i64 0), i8* %0) #9
+  %2 = icmp eq i8* %0, null
+  %3 = select i1 %2, i8* getelementptr inbounds ([1 x i8], [1 x i8]* @.str.2, i64 0, i64 0), i8* %0
+  %4 = tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str.1, i64 0, i64 0), i8* %3) #9
   ret void
 }
 
 ; Function Attrs: noreturn sspstrong uwtable
 define dso_local void @error() local_unnamed_addr #2 {
-  %1 = tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([15 x i8], [15 x i8]* @.str.2, i64 0, i64 0)) #9
+  %1 = tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([15 x i8], [15 x i8]* @.str.3, i64 0, i64 0)) #9
   tail call void @exit(i32 1) #10
   unreachable
 }
@@ -262,7 +264,7 @@ define dso_local i8* @readString() local_unnamed_addr #0 {
   br label %16
 
 ; <label>:16:                                     ; preds = %8, %14, %0
-  %17 = phi i8* [ getelementptr inbounds ([1 x i8], [1 x i8]* @.str.3, i64 0, i64 0), %0 ], [ %15, %14 ], [ %9, %8 ]
+  %17 = phi i8* [ null, %0 ], [ %15, %14 ], [ %9, %8 ]
   call void @llvm.lifetime.end.p0i8(i64 8, i8* nonnull %4) #11
   call void @llvm.lifetime.end.p0i8(i64 8, i8* nonnull %3) #11
   ret i8* %17
@@ -270,14 +272,26 @@ define dso_local i8* @readString() local_unnamed_addr #0 {
 
 ; Function Attrs: nounwind sspstrong uwtable
 define dso_local i8* @_bltn_string_concat(i8*, i8*) local_unnamed_addr #6 {
-  %3 = tail call i64 @strlen(i8* %0) #13
-  %4 = tail call i64 @strlen(i8* %1) #13
-  %5 = add i64 %3, 1
-  %6 = add i64 %5, %4
-  %7 = tail call noalias i8* @malloc(i64 %6) #12
-  %8 = tail call i8* @strcpy(i8* %7, i8* %0) #12
-  %9 = tail call i8* @strcat(i8* %7, i8* %1) #12
-  ret i8* %7
+  %3 = icmp eq i8* %0, null
+  br i1 %3, label %14, label %4
+
+; <label>:4:                                      ; preds = %2
+  %5 = icmp eq i8* %1, null
+  br i1 %5, label %14, label %6
+
+; <label>:6:                                      ; preds = %4
+  %7 = tail call i64 @strlen(i8* nonnull %0) #13
+  %8 = tail call i64 @strlen(i8* nonnull %1) #13
+  %9 = add i64 %7, 1
+  %10 = add i64 %9, %8
+  %11 = tail call noalias i8* @malloc(i64 %10) #12
+  %12 = tail call i8* @strcpy(i8* %11, i8* nonnull %0) #12
+  %13 = tail call i8* @strcat(i8* %11, i8* nonnull %1) #12
+  br label %14
+
+; <label>:14:                                     ; preds = %4, %2, %6
+  %15 = phi i8* [ %11, %6 ], [ %1, %2 ], [ %0, %4 ]
+  ret i8* %15
 }
 
 ; Function Attrs: nounwind readonly
@@ -294,9 +308,23 @@ declare i8* @strcat(i8*, i8*) local_unnamed_addr #5
 
 ; Function Attrs: nounwind readonly sspstrong uwtable
 define dso_local zeroext i1 @_bltn_string_eq(i8* readonly, i8* readonly) local_unnamed_addr #8 {
-  %3 = tail call i32 @strcmp(i8* %0, i8* %1) #13
-  %4 = icmp eq i32 %3, 0
-  ret i1 %4
+  %3 = icmp ne i8* %0, null
+  %4 = icmp ne i8* %1, null
+  %5 = or i1 %3, %4
+  br i1 %5, label %6, label %11
+
+; <label>:6:                                      ; preds = %2
+  %7 = and i1 %3, %4
+  br i1 %7, label %8, label %11
+
+; <label>:8:                                      ; preds = %6
+  %9 = tail call i32 @strcmp(i8* nonnull %0, i8* nonnull %1) #13
+  %10 = icmp eq i32 %9, 0
+  br label %11
+
+; <label>:11:                                     ; preds = %6, %2, %8
+  %12 = phi i1 [ %10, %8 ], [ true, %2 ], [ false, %6 ]
+  ret i1 %12
 }
 
 ; Function Attrs: nounwind readonly
@@ -304,14 +332,28 @@ declare i32 @strcmp(i8*, i8*) local_unnamed_addr #7
 
 ; Function Attrs: nounwind readonly sspstrong uwtable
 define dso_local zeroext i1 @_bltn_string_ne(i8* readonly, i8* readonly) local_unnamed_addr #8 {
-  %3 = tail call i32 @strcmp(i8* %0, i8* %1) #13
-  %4 = icmp ne i32 %3, 0
-  ret i1 %4
+  %3 = icmp ne i8* %0, null
+  %4 = icmp ne i8* %1, null
+  %5 = or i1 %3, %4
+  br i1 %5, label %6, label %11
+
+; <label>:6:                                      ; preds = %2
+  %7 = and i1 %3, %4
+  br i1 %7, label %8, label %11
+
+; <label>:8:                                      ; preds = %6
+  %9 = tail call i32 @strcmp(i8* nonnull %0, i8* nonnull %1) #13
+  %10 = icmp ne i32 %9, 0
+  br label %11
+
+; <label>:11:                                     ; preds = %2, %6, %8
+  %12 = phi i1 [ %10, %8 ], [ false, %2 ], [ true, %6 ]
+  ret i1 %12
 }
 
 ; Function Attrs: sspstrong uwtable
 define dso_local i8* @_bltn_malloc(i32) local_unnamed_addr #0 {
-  %2 = icmp slt i32 %0, 0
+  %2 = icmp slt i32 %0, 1
   br i1 %2, label %3, label %4
 
 ; <label>:3:                                      ; preds = %1
@@ -335,6 +377,45 @@ define dso_local i8* @_bltn_malloc(i32) local_unnamed_addr #0 {
 
 ; Function Attrs: nounwind
 declare i8* @memset(i8*, i32, i64) local_unnamed_addr #5
+
+; Function Attrs: sspstrong uwtable
+define dso_local nonnull i8* @_bltn_alloc_array(i32, i32) local_unnamed_addr #0 {
+  %3 = icmp slt i32 %0, 1
+  %4 = icmp slt i32 %1, 1
+  %5 = or i1 %3, %4
+  br i1 %5, label %6, label %7
+
+; <label>:6:                                      ; preds = %2
+  tail call void @error() #9
+  unreachable
+
+; <label>:7:                                      ; preds = %2
+  %8 = mul nsw i32 %1, %0
+  %9 = icmp slt i32 %8, -3
+  br i1 %9, label %10, label %11
+
+; <label>:10:                                     ; preds = %7
+  tail call void @error() #9
+  unreachable
+
+; <label>:11:                                     ; preds = %7
+  %12 = add nsw i32 %8, 4
+  %13 = sext i32 %12 to i64
+  %14 = tail call noalias i8* @malloc(i64 %13) #12
+  %15 = icmp eq i8* %14, null
+  br i1 %15, label %16, label %17
+
+; <label>:16:                                     ; preds = %11
+  tail call void @error() #9
+  unreachable
+
+; <label>:17:                                     ; preds = %11
+  %18 = tail call i8* @memset(i8* nonnull %14, i32 0, i64 %13) #12
+  %19 = bitcast i8* %14 to i32*
+  store i32 %0, i32* %19, align 4, !tbaa !11
+  %20 = getelementptr inbounds i8, i8* %14, i64 4
+  ret i8* %20
+}
 
 declare i64 @__getdelim(i8**, i64*, i32, %struct._IO_FILE*) local_unnamed_addr #1
 
@@ -370,3 +451,5 @@ attributes #13 = { nobuiltin nounwind readonly }
 !8 = !{!9, !9, i64 0}
 !9 = !{!"long", !6, i64 0}
 !10 = !{!6, !6, i64 0}
+!11 = !{!12, !12, i64 0}
+!12 = !{!"int", !6, i64 0}

@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::cell::{Cell, RefCell};
 use model::ast::*;
 use frontend_error::FrontendError;
 use super::{KEYWORDS, optimize_const_expr_shallow, return_or_fail, stmt_to_block};
@@ -262,6 +263,7 @@ Expr6: Box<Expr> = {
         let (l, r) = (e1.span.0, id.span.1);
         let e = InnerExpr::ObjField {
             obj: e1,
+            is_obj_an_array: Cell::new(None),
             field: id,
         };
         new_spanned_boxed(l, e, r)
@@ -278,7 +280,7 @@ LitBool: InnerExpr = {
     "true" => InnerExpr::LitBool(true),
     "false" => InnerExpr::LitBool(false),
 };
-LitNull: InnerExpr = { "null" => InnerExpr::LitNull };
+LitNull: InnerExpr = { "null" => InnerExpr::LitNull(RefCell::new(None)) };
 LitVar: InnerExpr = { Ident => InnerExpr::LitVar(<>.inner) };
 LitStr: InnerExpr = { String => InnerExpr::LitStr(<>) };
 FunCallArgs = VecSeparated<Expr, ",">;

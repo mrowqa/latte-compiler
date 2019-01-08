@@ -3,6 +3,7 @@ use model::{ast, ir};
 use semantics::global_context::GlobalContext;
 use std::collections::HashMap;
 
+mod class;
 mod function;
 
 pub struct CodeGen<'a> {

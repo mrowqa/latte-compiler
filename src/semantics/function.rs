@@ -200,20 +200,19 @@ impl<'a> FunctionContext<'a> {
                 }
                 Assign(lhs, rhs) => {
                     // todo (optional) can check both sides of '=' for more errors
-                    self.check_if_lvalue(&lhs, &cur_env)
-                        .accumulate_errors_in(&mut errors);
                     match self.check_expression_get_type(&lhs, &cur_env) {
-                        Ok(t) => self
-                            .check_expression_check_type(&rhs, &t, &cur_env)
-                            .accumulate_errors_in(&mut errors),
+                        Ok(t) => {
+                            self.check_if_lvalue(&lhs).accumulate_errors_in(&mut errors);
+                            self.check_expression_check_type(&rhs, &t, &cur_env)
+                                .accumulate_errors_in(&mut errors);
+                        }
                         Err(err) => errors.extend(err),
                     }
                 }
                 Incr(e) | Decr(e) => {
-                    self.check_if_lvalue(&e, &cur_env)
-                        .accumulate_errors_in(&mut errors);
                     self.check_expression_check_type(&e, &InnerType::Int, &cur_env)
                         .accumulate_errors_in(&mut errors);
+                    self.check_if_lvalue(&e).accumulate_errors_in(&mut errors);
                 }
                 Ret(opt_expr) => {
                     after_ret = true;
@@ -322,20 +321,21 @@ impl<'a> FunctionContext<'a> {
         }
     }
 
-    fn check_if_lvalue(&self, expr: &'a Expr, cur_env: &Env<'a>) -> FrontendResult<()> {
+    // requirement: check_expr called on expr beforehand
+    fn check_if_lvalue(&self, expr: &'a Expr) -> FrontendResult<()> {
         use self::InnerExpr::*;
         match &expr.inner {
             LitVar(_) | ArrayElem { .. } => Ok(()),
-            ObjField { obj, .. } => match self.check_expression_get_type(obj, cur_env) {
-                Ok(InnerType::Class(_)) => Ok(()),
-                Ok(_) => Err(vec![FrontendError {
+            ObjField { is_obj_an_array, .. } => match is_obj_an_array.get() {
+                Some(true) => Err(vec![FrontendError {
                     err: "Error: only class objects have mutable fields".to_string(),
                     span: expr.span
                 }]),
-                Err(_) => Err(vec![]), // it's caller responsibility to check that
+                Some(false) => Ok(()), // it's a class
+                None => unreachable!(), // this function requires analysis to be done beforehand
             },
             _ => Err(vec![FrontendError {
-                err: "Error: required an l-value (options: variable <var>, array elem <expr>[index], or object field <obj>.<field>)".to_string(),
+                err: "Error: required an l-value (options: variable <var>, array elem <expr>.[index], or object field <obj>.<field>)".to_string(),
                 span: expr.span,
             }]),
         }
@@ -349,7 +349,14 @@ impl<'a> FunctionContext<'a> {
     ) -> FrontendResult<()> {
         let expr_type = self.check_expression_get_type(expr, cur_env)?;
         self.global_ctx
-            .check_types_compatibility(expected_expr_type, &expr_type, expr.span)
+            .check_types_compatibility(expected_expr_type, &expr_type, expr.span)?;
+        match &expr.inner {
+            InnerExpr::LitNull(type_info) => {
+                type_info.replace(Some(expected_expr_type.clone()));
+            }
+            _ => (),
+        };
+        Ok(())
     }
 
     fn check_expression_get_type(
@@ -396,7 +403,7 @@ impl<'a> FunctionContext<'a> {
             LitInt(_) => Ok(Int),
             LitBool(_) => Ok(Bool),
             LitStr(_) => Ok(String),
-            LitNull => Ok(Null),
+            LitNull(_) => Ok(Null),
             FunCall {
                 function_name,
                 args,
@@ -514,8 +521,13 @@ impl<'a> FunctionContext<'a> {
                     front_err("Error: you can use new only with class and array types".to_string())
                 }
             }
-            ObjField { obj, field } => match self.check_expression_get_type(&obj, &cur_env) {
+            ObjField {
+                obj,
+                is_obj_an_array,
+                field,
+            } => match self.check_expression_get_type(&obj, &cur_env) {
                 Ok(Class(cl_name)) => {
+                    is_obj_an_array.set(Some(false));
                     let desc = self
                         .global_ctx
                         .get_class_description(&cl_name)
@@ -532,6 +544,7 @@ impl<'a> FunctionContext<'a> {
                     }
                 }
                 Ok(Array(_)) => {
+                    is_obj_an_array.set(Some(true));
                     if field.inner == "length" {
                         Ok(Int)
                     } else {

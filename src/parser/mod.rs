@@ -5,6 +5,7 @@ use frontend_error::{FrontendError, FrontendResult};
 use model::ast::{
     new_spanned_boxed, BinaryOp, Block, Expr, InnerExpr, InnerStmt, InnerUnaryOp, Program, Stmt,
 };
+use std::cell::RefCell;
 
 const KEYWORDS: &[&str] = &[
     "if", "else", "return", "while", "for", "new", "class", "extends", "true", "false", "null",
@@ -147,16 +148,16 @@ fn optimize_const_expr_shallow(expr: InnerExpr) -> Result<InnerExpr, &'static st
             (LitBool(l), NE, LitBool(r)) => LitBool(l != r),
             (LitStr(l), EQ, LitStr(r)) => LitBool(l == r),
             (LitStr(l), NE, LitStr(r)) => LitBool(l != r),
-            _ => LitNull,
+            _ => LitNull(RefCell::new(None)),
         },
         UnaryOp(ref op, ref subexpr) => match (&op.inner, &subexpr.inner) {
             (IntNeg, LitInt(l)) => LitInt(-l),
             (BoolNeg, LitBool(l)) => LitBool(!l),
-            _ => LitNull,
+            _ => LitNull(RefCell::new(None)),
         },
-        _ => LitNull,
+        _ => LitNull(RefCell::new(None)),
     };
-    Ok(if let LitNull = e { expr } else { e })
+    Ok(if let LitNull(_) = e { expr } else { e })
 }
 
 fn return_or_fail(
@@ -172,7 +173,7 @@ fn return_or_fail(
                 err: err.to_string(),
                 span: (l, r),
             });
-            new_spanned_boxed(l, InnerExpr::LitNull, r)
+            new_spanned_boxed(l, InnerExpr::LitNull(RefCell::new(None)), r)
         }
     }
 }

@@ -1,3 +1,4 @@
+use codegen::class::get_size_of;
 use model::{ast, ir};
 use semantics::global_context::{ClassDesc, GlobalContext};
 use std::collections::{HashMap, HashSet};
@@ -16,8 +17,8 @@ struct EnvFrame<'a> {
 
 enum ValueWrapper<'a> {
     GlobalOrLocalValue(&'a ir::Value),
-    #[allow(dead_code)] // todo (ext) remove
-    ClassValue(()), // todo (ext)
+    #[allow(dead_code)] // todo (ext,str) remove
+    ClassValue(()), // todo (ext,str)
 }
 
 struct FunctionInfoWrapper {
@@ -289,12 +290,15 @@ impl<'a> FunctionCodeGen<'a> {
                                     Int => ir::Value::LitInt(0),
                                     Bool => ir::Value::LitBool(false),
                                     String => self.get_global_string(""),
-                                    Array(_) | Class(_) => ir::Value::LitNullPtr,
+                                    Array(_) | Class(_) => ir::Value::LitNullPtr(Some(
+                                        ir::Type::from_ast(&var_type.inner),
+                                    )),
                                     Null | Void => unreachable!(),
                                 }
                             }
                         };
-                        // todo (ext) handle nulls
+                        // todo handle nulls
+                        // todo (ext,str) handle nulls
                         self.env
                             .add_new_local_variable(cur_label, var_name.inner.as_ref(), value)
                     }
@@ -308,7 +312,8 @@ impl<'a> FunctionCodeGen<'a> {
                             self.env
                                 .update_existing_local_variable(cur_label, &var_name, value);
                         }
-                        _ => unimplemented!(), // todo (ext)
+                        _ => unimplemented!(), // todo
+                                               // todo (ext,arr,str)
                     };
                 }
                 Incr(lhs) | Decr(lhs) => {
@@ -322,7 +327,7 @@ impl<'a> FunctionCodeGen<'a> {
                             let new_reg = self.get_new_reg_num();
                             let val_l = match self.env.get_variable(cur_label, var_name) {
                                 ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
-                                ValueWrapper::ClassValue(_) => unimplemented!(), // todo (ext)
+                                ValueWrapper::ClassValue(_) => unimplemented!(), // todo (ext,str)
                             };
                             let val_r = ir::Value::LitInt(1);
                             self.get_block(cur_label)
@@ -332,7 +337,8 @@ impl<'a> FunctionCodeGen<'a> {
                             self.env
                                 .update_existing_local_variable(cur_label, &var_name, val_res);
                         }
-                        _ => unimplemented!(), // todo (ext)
+                        _ => unimplemented!(), // todo
+                                               // todo (ext,arr,str)
                     };
                 }
                 Ret(opt_expr) => {
@@ -476,7 +482,7 @@ impl<'a> FunctionCodeGen<'a> {
                         cur_label = cont_label;
                     }
                 },
-                ForEach { .. } => unimplemented!(), // todo (ext)
+                ForEach { .. } => unimplemented!(), // todo
                 Expr(expr) => {
                     let (new_label, _) = self.process_expression(&expr.inner, cur_label);
                     cur_label = new_label;
@@ -554,7 +560,10 @@ impl<'a> FunctionCodeGen<'a> {
                 let casted_val = ir::Value::Register(reg_num, str_type);
                 (cur_label, casted_val)
             }
-            LitNull => (cur_label, ir::Value::LitNullPtr),
+            LitNull(type_info) => (
+                cur_label,
+                ir::Value::LitNullPtr(type_info.borrow_mut().as_ref().map(ir::Type::from_ast)),
+            ),
             FunCall {
                 function_name,
                 args,
@@ -562,7 +571,7 @@ impl<'a> FunctionCodeGen<'a> {
                 let info = self.env.get_function(function_name.inner.as_ref());
                 let mut args_values = vec![];
                 if info.is_class_method {
-                    // todo (ext) add "this" ptr to args
+                    // todo (ext,str) add "this" ptr to args
                     unimplemented!()
                 }
 
@@ -570,7 +579,8 @@ impl<'a> FunctionCodeGen<'a> {
                 for a in args {
                     let (new_label, value) = self.process_expression(&a.inner, cur_label);
                     cur_label = new_label;
-                    // todo (ext) handle nulls (implicit casts)
+                    // todo handle nulls (implicit casts)
+                    // todo (ext,str) handle nulls (implicit casts)
                     args_values.push(value);
                 }
 
@@ -663,31 +673,38 @@ impl<'a> FunctionCodeGen<'a> {
                                 .push(ir::Operation::Compare(new_reg, new_op, lhs_val, rhs_val));
                             (new_label, ir::Value::Register(new_reg, ir::Type::Bool))
                         }
-                        ir::Type::Ptr(subtype) => {
-                            match *subtype {
-                                ir::Type::Char => {
-                                    let fun_name = match op {
-                                        EQ => "_bltn_string_eq",
-                                        NE => "_bltn_string_ne",
-                                        _ => unreachable!(),
-                                    };
-                                    let new_reg = self.get_new_reg_num();
-                                    self.get_block(cur_label).body.push(
-                                        ir::Operation::FunctionCall(
-                                            Some(new_reg),
-                                            ir::Type::Bool,
-                                            fun_name.to_string(),
-                                            vec![lhs_val, rhs_val],
-                                        ),
-                                    );
-                                    (cur_label, ir::Value::Register(new_reg, ir::Type::Bool))
-                                }
-                                _ => {
-                                    // todo (ext) comparing nulls with classes and arrays
-                                    unimplemented!()
-                                }
+                        ir::Type::Ptr(subtype) => match *subtype {
+                            ir::Type::Char => {
+                                let fun_name = match op {
+                                    EQ => "_bltn_string_eq",
+                                    NE => "_bltn_string_ne",
+                                    _ => unreachable!(),
+                                };
+                                let new_reg = self.get_new_reg_num();
+                                self.get_block(cur_label)
+                                    .body
+                                    .push(ir::Operation::FunctionCall(
+                                        Some(new_reg),
+                                        ir::Type::Bool,
+                                        fun_name.to_string(),
+                                        vec![lhs_val, rhs_val],
+                                    ));
+                                (cur_label, ir::Value::Register(new_reg, ir::Type::Bool))
                             }
-                        }
+                            _ => {
+                                // objects & arrays
+                                let cmp_op = match op {
+                                    EQ => ir::CmpOp::EQ,
+                                    NE => ir::CmpOp::NE,
+                                    _ => unreachable!(),
+                                };
+                                let new_reg = self.get_new_reg_num();
+                                self.get_block(cur_label).body.push(ir::Operation::Compare(
+                                    new_reg, cmp_op, lhs_val, rhs_val,
+                                ));
+                                (cur_label, ir::Value::Register(new_reg, ir::Type::Bool))
+                            }
+                        },
                         ir::Type::Void | ir::Type::Char | ir::Type::Struct(_) => unreachable!(),
                     }
                 }
@@ -720,11 +737,144 @@ impl<'a> FunctionCodeGen<'a> {
                     (new_label, ir::Value::Register(new_reg, ir::Type::Bool))
                 }
             },
-            NewArray { .. } => unimplemented!(),  // todo (ext)
-            ArrayElem { .. } => unimplemented!(), // todo (ext)
-            NewObject(_) => unimplemented!(),     // todo (ext)
-            ObjField { .. } => unimplemented!(),  // todo (ext)
-            ObjMethodCall { .. } => unimplemented!(), // todo (ext)
+            NewArray {
+                elem_type,
+                elem_cnt,
+            } => {
+                let elem_type_ir = ir::Type::from_ast(&elem_type.inner);
+                let elem_size = get_size_of(&elem_type_ir);
+                let (new_label, elem_cnt_value) =
+                    self.process_expression(&elem_cnt.inner, cur_label);
+
+                let reg_num = self.get_new_reg_num();
+                let casted_reg_num = self.get_new_reg_num();
+                let array_type_ir = ir::Type::Ptr(Box::new(elem_type_ir));
+                let body = &mut self.get_block(new_label).body;
+                body.push(ir::Operation::FunctionCall(
+                    Some(reg_num),
+                    ir::Type::Ptr(Box::new(ir::Type::Char)),
+                    "_bltn_alloc_array".to_string(),
+                    vec![elem_cnt_value, ir::Value::LitInt(elem_size)],
+                ));
+                let void_ptr_type = ir::Type::Ptr(Box::new(ir::Type::Char));
+                body.push(ir::Operation::CastPtr {
+                    dst: casted_reg_num,
+                    dst_type: array_type_ir.clone(),
+                    src_value: ir::Value::Register(reg_num, void_ptr_type),
+                });
+
+                (
+                    new_label,
+                    ir::Value::Register(casted_reg_num, array_type_ir),
+                )
+            }
+            ArrayElem { .. } => {
+                // todo (ext,str) refactor; is it same as ObjField?
+                let (new_label, elem_ref_value) =
+                    self.process_lvalue_ref_expression(expr, cur_label);
+                let new_reg = self.get_new_reg_num();
+                let elem_type = match &elem_ref_value {
+                    ir::Value::Register(_, ir::Type::Ptr(subtype)) => (**subtype).clone(),
+                    _ => unreachable!(),
+                };
+                self.get_block(new_label)
+                    .body
+                    .push(ir::Operation::Load(new_reg, elem_ref_value));
+                (new_label, ir::Value::Register(new_reg, elem_type))
+            }
+            NewObject(_) => unimplemented!(), // todo (ext,str)
+            ObjField {
+                is_obj_an_array, ..
+            } => {
+                let (new_label, ptr_value) = self.process_lvalue_ref_expression(expr, cur_label);
+                match is_obj_an_array.get() {
+                    Some(true) => {
+                        let reg = self.get_new_reg_num();
+                        self.get_block(cur_label)
+                            .body
+                            .push(ir::Operation::Load(reg, ptr_value));
+                        (new_label, ir::Value::Register(reg, ir::Type::Int))
+                    }
+                    Some(false) => unimplemented!(), // todo (ext,str)
+                    None => unreachable!(),
+                }
+            }
+            ObjMethodCall { .. } => unimplemented!(), // todo (ext,str)
+        }
+    }
+
+    fn process_lvalue_ref_expression(
+        &mut self,
+        expr: &ast::InnerExpr,
+        cur_label: ir::Label,
+    ) -> (ir::Label, ir::Value) {
+        use model::ast::InnerExpr::{ArrayElem, ObjField};
+        match expr {
+            ArrayElem { array, index } => {
+                let (new_label, array_value) = self.process_expression(&array.inner, cur_label);
+                let (new_label, index_value) = self.process_expression(&index.inner, new_label);
+                let new_reg = self.get_new_reg_num();
+                let array_type = array_value.get_type();
+                let elem_type = match &array_type {
+                    ir::Type::Ptr(subtype) => (**subtype).clone(),
+                    _ => unreachable!(),
+                };
+                self.get_block(new_label)
+                    .body
+                    .push(ir::Operation::GetElementPtr(
+                        new_reg,
+                        elem_type,
+                        array_value,
+                        index_value,
+                    ));
+                (new_label, ir::Value::Register(new_reg, array_type))
+            }
+            ObjField {
+                obj,
+                is_obj_an_array,
+                ..
+            } => {
+                let (new_label, ptr_value) = self.process_expression(&obj.inner, cur_label);
+                match is_obj_an_array.get() {
+                    Some(true) => {
+                        // reading length
+                        let mut casted_reg: ir::RegNum;
+                        let array_type = ptr_value.get_type();
+                        let elem_type = match &array_type {
+                            ir::Type::Ptr(subtype) => (**subtype).clone(),
+                            _ => unreachable!(),
+                        };
+                        let int_ptr_type = ir::Type::Ptr(Box::new(ir::Type::Int));
+                        match elem_type {
+                            ir::Type::Int => match ptr_value {
+                                ir::Value::Register(reg, _) => casted_reg = reg,
+                                _ => unreachable!(),
+                            },
+                            _ => {
+                                casted_reg = self.get_new_reg_num();
+                                self.get_block(new_label).body.push(ir::Operation::CastPtr {
+                                    dst: casted_reg,
+                                    dst_type: int_ptr_type.clone(),
+                                    src_value: ptr_value,
+                                });
+                            }
+                        }
+                        let result_reg = self.get_new_reg_num();
+                        self.get_block(new_label)
+                            .body
+                            .push(ir::Operation::GetElementPtr(
+                                result_reg,
+                                ir::Type::Int,
+                                ir::Value::Register(casted_reg, int_ptr_type.clone()),
+                                ir::Value::LitInt(-1),
+                            ));
+                        (new_label, ir::Value::Register(result_reg, int_ptr_type))
+                    }
+                    Some(false) => unimplemented!(), // todo (ext,str)
+                    None => unreachable!(),
+                }
+            }
+            _ => unreachable!(), // we don't use store for local variables
         }
     }
 

@@ -46,6 +46,13 @@ pub enum Operation {
     Compare(RegNum, CmpOp, Value, Value),
     GetElementPtr(RegNum, Type, Value, Value),
     CastGlobalString(RegNum, usize, GlobalStrNum), // usize is string length
+    CastPtr {
+        dst: RegNum,
+        dst_type: Type,
+        src_value: Value,
+    },
+    Load(RegNum, Value),
+    // Store(RegNum, Value, Value), // todo
     Branch1(Label),
     Branch2(Value, Label, Label),
 }
@@ -71,7 +78,7 @@ pub enum CmpOp {
 pub enum Value {
     LitInt(i32),
     LitBool(bool),
-    LitNullPtr,
+    LitNullPtr(Option<Type>),
     Register(RegNum, Type),
     GlobalRegister(GlobalStrNum),
 }
@@ -91,7 +98,8 @@ impl Value {
         match self {
             Value::LitInt(_) => Type::Int,
             Value::LitBool(_) => Type::Bool,
-            Value::LitNullPtr => Type::Ptr(Box::new(Type::Void)),
+            Value::LitNullPtr(Some(t)) => t.clone(),
+            Value::LitNullPtr(None) => Type::Ptr(Box::new(Type::Char)), // void* is illegal in llvm
             Value::Register(_, t) => t.clone(),
             Value::GlobalRegister(_) => Type::Ptr(Box::new(Type::Char)),
         }
@@ -106,7 +114,7 @@ impl Type {
             ast::InnerType::String => Type::Ptr(Box::new(Type::Char)),
             ast::InnerType::Array(subtype) => Type::Ptr(Box::new(Type::from_ast(&subtype))),
             ast::InnerType::Class(name) => Type::Ptr(Box::new(Type::Struct(name.clone()))),
-            ast::InnerType::Null => Type::Ptr(Box::new(Type::Void)),
+            ast::InnerType::Null => Type::Ptr(Box::new(Type::Char)),
             ast::InnerType::Void => Type::Void,
         }
     }
@@ -125,6 +133,7 @@ declare i8*  @_bltn_string_concat(i8*, i8*)
 declare i1   @_bltn_string_eq(i8*, i8*)
 declare i1   @_bltn_string_ne(i8*, i8*)
 declare i8*  @_bltn_malloc(i32)
+declare i8*  @_bltn_alloc_array(i32, i32)
 
 "#
         )?;
@@ -264,14 +273,14 @@ impl fmt::Display for Operation {
                     EQ => "eq",
                     NE => "ne",
                 };
+                let val_type = match val1 {
+                    Value::LitNullPtr(_) => val2.get_type(),
+                    _ => val1.get_type(),
+                };
                 write!(
                     f,
                     "%.r{} = icmp {} {} {}, {}",
-                    reg_num.0,
-                    op_str,
-                    val1.get_type(),
-                    val1,
-                    val2
+                    reg_num.0, op_str, val_type, val1, val2
                 )?;
             }
             GetElementPtr(reg_num, elem_type, ptr_val, ind_val) => {
@@ -291,6 +300,32 @@ impl fmt::Display for Operation {
                     f,
                     "%.r{0} = getelementptr [{1} x i8], [{1} x i8]* @.str.{2}, i32 0, i32 0",
                     reg_num.0, str_len, str_num.0,
+                )?;
+            }
+            CastPtr {
+                dst,
+                dst_type,
+                src_value,
+            } => {
+                let (val_reg, val_type) = match src_value {
+                    Value::Register(val_reg, val_type) => (val_reg, val_type),
+                    _ => unreachable!(),
+                };
+                write!(
+                    f,
+                    "%.r{} = bitcast {} %.r{} to {}",
+                    dst.0, val_type, val_reg.0, dst_type
+                )?;
+            }
+            Load(reg_num, value) => {
+                let (val_reg, elem_type) = match value {
+                    Value::Register(val_reg, Type::Ptr(subtype)) => (val_reg, subtype),
+                    _ => unreachable!(),
+                };
+                write!(
+                    f,
+                    "%.r{0} = load {1}, {1}* %.r{2}",
+                    reg_num.0, elem_type, val_reg.0
                 )?;
             }
             Branch1(label) => {
@@ -315,7 +350,7 @@ impl fmt::Display for Value {
         match self {
             LitInt(val) => val.fmt(f),
             LitBool(val) => (*val as i32).fmt(f),
-            LitNullPtr => 0.fmt(f),
+            LitNullPtr(_) => "null".fmt(f),
             Register(reg_num, _) => write!(f, "%.r{}", reg_num.0),
             GlobalRegister(str_num) => write!(f, "@.str.{}", str_num.0),
         }
