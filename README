@@ -65,8 +65,12 @@ while (i < arr.length) {
   nie jest nullem, wpp. zachowanie jest niezdefiniowane (prawdopodobnie bedzie
   segfault),
 - string jest typem referencyjnym, ale semantycznie nigdy nie jest nullem
-  (domyslnie jest napisem pustym); jednakze napis pusty moze byc
-  reprezentowany w implementacji przez wskaznik na adres 0,
+  (domyslnie jest napisem pustym); jednakze napis pusty jest reprezentowany
+  w implementacji przez wskaznik na adres 0,
+- optymalizacja: dany napis jest generowany jako stala w LLVM-ie tylko raz
+  i wspoluzywana przez wiele funkcji; w szczegolnosci nie jest generowana
+  stala dla napisu pustego, poniewaz zawsze jest on reprezentowany przez
+  wskaznik na adres 0,
 - poprawnym jest:
 ```
 void foo() {}

@@ -289,8 +289,7 @@ impl<'a> FunctionCodeGen<'a> {
                                 match &var_type.inner {
                                     Int => ir::Value::LitInt(0),
                                     Bool => ir::Value::LitBool(false),
-                                    String => self.get_global_string(""),
-                                    Array(_) | Class(_) => ir::Value::LitNullPtr(Some(
+                                    String | Array(_) | Class(_) => ir::Value::LitNullPtr(Some(
                                         ir::Type::from_ast(&var_type.inner),
                                     )),
                                     Null | Void => unreachable!(),
@@ -542,23 +541,28 @@ impl<'a> FunctionCodeGen<'a> {
             LitInt(int_val) => (cur_label, ir::Value::LitInt(*int_val)),
             LitBool(bool_val) => (cur_label, ir::Value::LitBool(*bool_val)),
             LitStr(str_val) => {
-                let reg_num = self.get_new_reg_num();
-                let str_ir_val = self.get_global_string(str_val);
-                match str_ir_val {
-                    ir::Value::GlobalRegister(str_num) => {
-                        self.get_block(cur_label)
-                            .body
-                            .push(ir::Operation::CastGlobalString(
-                                reg_num,
-                                str_val.len() + 1,
-                                str_num,
-                            ))
+                if str_val == "" {
+                    let str_type = ir::Type::Ptr(Box::new(ir::Type::Char));
+                    (cur_label, ir::Value::LitNullPtr(Some(str_type)))
+                } else {
+                    let reg_num = self.get_new_reg_num();
+                    let str_ir_val = self.get_global_string(str_val);
+                    match str_ir_val {
+                        ir::Value::GlobalRegister(str_num) => {
+                            self.get_block(cur_label)
+                                .body
+                                .push(ir::Operation::CastGlobalString(
+                                    reg_num,
+                                    str_val.len() + 1,
+                                    str_num,
+                                ))
+                        }
+                        _ => unreachable!(),
                     }
-                    _ => unreachable!(),
+                    let str_type = ir::Type::Ptr(Box::new(ir::Type::Char));
+                    let casted_val = ir::Value::Register(reg_num, str_type);
+                    (cur_label, casted_val)
                 }
-                let str_type = ir::Type::Ptr(Box::new(ir::Type::Char));
-                let casted_val = ir::Value::Register(reg_num, str_type);
-                (cur_label, casted_val)
             }
             LitNull(type_info) => (
                 cur_label,
