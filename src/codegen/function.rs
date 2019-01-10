@@ -402,17 +402,19 @@ impl<'a> FunctionCodeGen<'a> {
                     expr => match false_branch {
                         None => {
                             let true_label = self.allocate_new_block(cur_label);
+                            let false_label = self.allocate_new_block(cur_label); // simplifies calculation of phi function
                             let cont_label = self.allocate_new_block(cur_label);
-                            self.process_expression_cond(&expr, cur_label, true_label, cont_label);
+                            self.process_expression_cond(&expr, cur_label, true_label, false_label);
                             let true_proxy_label = self.env.create_proxy_env(true_label);
                             let end_true_label = self.process_block(true_branch, true_label, false);
+                            self.add_branch1_op(false_label, cont_label);
                             if end_true_label != UNREACHABLE_LABEL {
                                 self.add_branch1_op(end_true_label, cont_label);
                                 self.calculate_phi_set_for_if(
                                     cur_label,
                                     cont_label,
                                     (end_true_label, true_proxy_label),
-                                    (cur_label, cur_label),
+                                    (false_label, false_label),
                                 );
                                 // phi set calculation applies proxy env properly
                             }
@@ -1000,7 +1002,6 @@ impl<'a> FunctionCodeGen<'a> {
         ir::Value::Register(result_reg, int_ptr_type)
     }
 
-    // todo bugfix check at common_succ for multiple preds
     fn calculate_phi_set_for_if(
         &mut self,
         common_pred: ir::Label,
@@ -1024,13 +1025,12 @@ impl<'a> FunctionCodeGen<'a> {
                 ValueWrapper::ClassValue(_) => unreachable!(),
             };
 
-            // todo (ext) readme mention handling nulls - not trivial
             if value0 != value1 || value0 != value2 {
                 let new_value = if value1 == value2 {
                     value1 // no need to emit phi function, just update environment
                 } else {
                     let reg_num = self.get_new_reg_num();
-                    let reg_type = value1.get_type(); // todo (ext) handle nulls somehow
+                    let reg_type = value1.get_type();
                     self.get_block(common_succ).phi_set.insert((
                         reg_num,
                         reg_type.clone(),

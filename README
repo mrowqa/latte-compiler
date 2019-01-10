@@ -68,8 +68,6 @@ while (it < end) {
 - optymalizacja: nie generuje kodu dla martwej galezi if-a ani ciala while'a,
   jesli warunek petli jest falszywy, ani kodu po `while (true)` (obliczam
   wyrazenia stale, ktore nie zawieraja zmiennych),
-- optymalizacja: nie generuje bloku dla galezi else, jesli nie istnieje ona
-  w kodzie
 - brak sztucznych ograniczen przy wyrazeniach - np. mozna odwolac sie do pola
   obiektu, gdy obiekt jest wynikiem wyrazenia, a nie tylko zmienna, podobnie
   przy tablicach
