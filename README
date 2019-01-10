@@ -42,7 +42,9 @@ jest zaimplementowane w backendzie.)
 
 - zmienilem skladnie dla indeksowania tablicy: `arr.[idx]`
 - nie wspieram rzutowania
-- `for(int x : arr) {...}` jest rownoznaczny:
+- wystepuja niejawne konwersje: podklasy do nadklasy, oraz nulla do klasy
+  lub tablicy,
+- `for(int x : arr) {...}` jest rownoznaczny (semantycznie):
 ```
 int i = 0;
 while (i < arr.length) {
@@ -50,6 +52,16 @@ while (i < arr.length) {
   // i w zaleznosci od typu - operujemy na kopii lub referencji
   int x = arr.[i];
   {...}
+}
+```
+- optymalizacja: petla foreach pod spodem jest jednakze zoptymalizowana
+  i odpowiada takiemu kodu w C:
+```
+int *it = array, *end = array + length;
+while (it < end) {
+  int elem = *it;
+  it++;
+  ... // cialo petli
 }
 ```
 - dopuszczam martwy kod (np. `if (true)` czy `while (false)`)
@@ -86,8 +98,6 @@ void bar() {return foo();}
 - w metodach, nie ma self, this ani tym podobnych (TODO (ext) rozwazyc zmiane),
 - dzielenie przez zero w wyrazeniach stalych jest wykrywane w czasie
   parsowania (mozna dostac syntax error i obok dzielenie przez 0),
-- wystepuja niejawne konwersje: podklasy do nadklasy, oraz nulla do klasy
-  lub tablicy,
 - optymalizacja: inkrementacja i dekrementacja (operatory ++ i --)
   np. `a.[4]++` tylko raz obliczy adres elementu `a.[4]`,
 - tablice moga byc wielowymiarowe:
@@ -96,6 +106,8 @@ int[][] v = new int[][42];
 // typeof(v[0]) == int[]
 // v[0] == null // domyslna wartosc
 ```
+- optymalizacja: dla tablic wykonuje tylko jedna alokacje; pole length
+  znajduje sie w pamieci tuz przed elementami tablicy,
 - generowany kod jest w postaci SSA: wszystkie zmienne lokalne
   sa w rejestrach, a load i store uzywane sa wylacznie do danych na stercie,
 - optymalizacja: funkcje phi w bloku po ifie emituje tylko dla tych zmiennych
@@ -114,11 +126,10 @@ int[][] v = new int[][42];
   moze wystepowac w wygenerowanym kodzie dluga sciezka bez rozgalezien,
 - kompiluje na architekture 64-bitowa (maszyna students nie ma 32-bitowego
   runtime'u libc uzywanego przez clanga),
-- dla zgrabniejszego generowanego kodu LLVM, recznie obliczam rozmiar typow
-  (mniej zgrabnie mozna zrobic "getelementptr null, 1" i potem zrzutowac na
-  inta); zakladam domyslny DataLayout,
-// todo emit data layout, just in case
-// todo describe arrays details
+- przy alokacji tablicy, z gory znam rozmiary typow podstawowych (w tym
+  wskaznik rowniez do nich zaliczam) - zakladam domyslny data layout dla
+  64-bitowej architektury; dla alokacji obiektow, korzystam
+  z "getelementptr null, 1",
 
 
 Drobne uwagi

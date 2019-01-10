@@ -52,7 +52,7 @@ pub enum Operation {
         src_value: Value,
     },
     Load(RegNum, Value),
-    // Store(RegNum, Value, Value), // todo
+    Store(Value, Value),
     Branch1(Label),
     Branch2(Value, Label, Label),
 }
@@ -326,6 +326,16 @@ impl fmt::Display for Operation {
                     f,
                     "%.r{0} = load {1}, {1}* %.r{2}",
                     reg_num.0, elem_type, val_reg.0
+                )?;
+            }
+            Store(target_val, ref_val) => {
+                write!(
+                    f,
+                    "store {} {}, {} {}",
+                    target_val.get_type(),
+                    target_val,
+                    ref_val.get_type(),
+                    ref_val
                 )?;
             }
             Branch1(label) => {

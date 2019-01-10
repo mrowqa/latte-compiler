@@ -422,34 +422,43 @@ impl<'a> FunctionContext<'a> {
                 let lhs_res = self.check_expression_get_type(lhs, &cur_env);
                 let rhs_res = self.check_expression_get_type(rhs, &cur_env);
                 match (lhs_res, rhs_res) {
-                    (Ok(lhs_t), Ok(rhs_t)) => match (lhs_t, op, rhs_t) {
-                        (Bool, And, Bool) | (Bool, Or, Bool) => Ok(Bool),
-                        (_, And, _) => fail_with("&&", "boolean expressions"),
-                        (_, Or, _) => fail_with("||", "boolean expressions"),
-                        (String, Add, String) => Ok(String),
-                        (Int, Add, Int) | (Int, Sub, Int)
-                        | (Int, Mul, Int) | (Int, Div, Int) | (Int, Mod, Int) => Ok(Int),
-                        (_, Add, _) => fail_with("+", "two integer expressions (sum) or two string expressions (concatenation)"),
-                        (_, Sub, _) => fail_with("-", "integer expressions"),
-                        (_, Mul, _) => fail_with("*", "integer expressions"),
-                        (_, Div, _) => fail_with("/", "integer expressions"),
-                        (_, Mod, _) => fail_with("%", "integer expressions"),
-                        (Int, LT, Int) | (Int, LE, Int)
-                        | (Int, GT, Int) | (Int, GE, Int)
-                        | (Int, EQ, Int) | (Int, NE, Int) => Ok(Bool),
-                        (_, LT, _) => fail_with("<", "integer expressions"),
-                        (_, LE, _) => fail_with("<=", "integer expressions"),
-                        (_, GT, _) => fail_with(">", "integer expressions"),
-                        (_, GE, _) => fail_with(">=", "integer expressions"),
-                        (Bool, EQ, Bool) | (String, EQ, String) => Ok(Bool),
-                        (Class(_), EQ, Null) | (Null, EQ, Class(_))
-                        | (Array(_), EQ, Null) | (Null, EQ, Array(_)) => Ok(Bool),
-                        (_, EQ, _) => fail_with("==", "two operands of same type: integer, boolean and string, or used to check if array or class reference is null"),
-                        (Bool, NE, Bool) | (String, NE, String) => Ok(Bool),
-                        (Class(_), NE, Null) | (Null, NE, Class(_))
-                        | (Array(_), NE, Null) | (Null, NE, Array(_)) => Ok(Bool),
-                        (_, NE, _) => fail_with("!=", "two operands of same type: integer, boolean and string, or used to check if array or class reference is null"),
-                    },
+                    (Ok(lhs_t), Ok(rhs_t)) => {
+                        match (&lhs.inner, &lhs_t, &rhs.inner, &rhs_t) {
+                            (InnerExpr::LitNull(tref), _, _, t)
+                            | (_, t, InnerExpr::LitNull(tref), _) => {
+                                tref.replace(Some(t.clone()));
+                            }
+                            _ => (),
+                        }
+                        match (lhs_t, op, rhs_t) {
+                            (Bool, And, Bool) | (Bool, Or, Bool) => Ok(Bool),
+                            (_, And, _) => fail_with("&&", "boolean expressions"),
+                            (_, Or, _) => fail_with("||", "boolean expressions"),
+                            (String, Add, String) => Ok(String),
+                            (Int, Add, Int) | (Int, Sub, Int)
+                            | (Int, Mul, Int) | (Int, Div, Int) | (Int, Mod, Int) => Ok(Int),
+                            (_, Add, _) => fail_with("+", "two integer expressions (sum) or two string expressions (concatenation)"),
+                            (_, Sub, _) => fail_with("-", "integer expressions"),
+                            (_, Mul, _) => fail_with("*", "integer expressions"),
+                            (_, Div, _) => fail_with("/", "integer expressions"),
+                            (_, Mod, _) => fail_with("%", "integer expressions"),
+                            (Int, LT, Int) | (Int, LE, Int)
+                            | (Int, GT, Int) | (Int, GE, Int)
+                            | (Int, EQ, Int) | (Int, NE, Int) => Ok(Bool),
+                            (_, LT, _) => fail_with("<", "integer expressions"),
+                            (_, LE, _) => fail_with("<=", "integer expressions"),
+                            (_, GT, _) => fail_with(">", "integer expressions"),
+                            (_, GE, _) => fail_with(">=", "integer expressions"),
+                            (Bool, EQ, Bool) | (String, EQ, String) => Ok(Bool),
+                            (Class(_), EQ, Null) | (Null, EQ, Class(_))
+                            | (Array(_), EQ, Null) | (Null, EQ, Array(_)) => Ok(Bool),
+                            (_, EQ, _) => fail_with("==", "two operands of same type: integer, boolean and string, or used to check if array or class reference is null"),
+                            (Bool, NE, Bool) | (String, NE, String) => Ok(Bool),
+                            (Class(_), NE, Null) | (Null, NE, Class(_))
+                            | (Array(_), NE, Null) | (Null, NE, Array(_)) => Ok(Bool),
+                            (_, NE, _) => fail_with("!=", "two operands of same type: integer, boolean and string, or used to check if array or class reference is null"),
+                        }
+                    }
                     (Ok(_), err @ Err(_)) => err,
                     (err @ Err(_), Ok(_)) => err,
                     (Err(mut err1), Err(err2)) => {

@@ -98,7 +98,7 @@ impl<'a> Env<'a> {
         // loop body would modify mapping (name -> value in phi set) in condition block
         // - we want to avoid that, since body after loop needs value from this phi set
         let names = self.get_all_visible_local_variables(frame_label);
-        let proxy_frame_label = self.insert_proxy_frame(frame_label);
+        let proxy_frame_label = self.insert_empty_proxy_frame(frame_label);
         for n in names {
             let value = match self.get_variable(frame_label, n) {
                 ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
@@ -114,7 +114,7 @@ impl<'a> Env<'a> {
         proxy_frame_label
     }
 
-    fn insert_proxy_frame(&mut self, frame_label: ir::Label) -> ir::Label {
+    pub fn insert_empty_proxy_frame(&mut self, frame_label: ir::Label) -> ir::Label {
         let proxy_frame_label = self.next_proxy_frame;
         self.next_proxy_frame.0 -= 1;
 
@@ -296,23 +296,26 @@ impl<'a> FunctionCodeGen<'a> {
                                 }
                             }
                         };
-                        // todo handle nulls
-                        // todo (ext,str) handle nulls
                         self.env
                             .add_new_local_variable(cur_label, var_name.inner.as_ref(), value)
                     }
                 }
                 Assign(lhs, rhs) => {
-                    // todo (ext) refactor assign/incr/decr somehow
-                    let (new_label, value) = self.process_expression(&rhs.inner, cur_label);
+                    let (new_label, rhs_value) = self.process_expression(&rhs.inner, cur_label);
                     cur_label = new_label;
                     match &lhs.inner {
                         ast::InnerExpr::LitVar(var_name) => {
                             self.env
-                                .update_existing_local_variable(cur_label, &var_name, value);
+                                .update_existing_local_variable(cur_label, &var_name, rhs_value);
                         }
-                        _ => unimplemented!(), // todo
-                                               // todo (ext,arr,str)
+                        _ => {
+                            let (new_label, ref_val) =
+                                self.process_lvalue_ref_expression(&lhs.inner, cur_label);
+                            cur_label = new_label;
+                            self.get_block(cur_label)
+                                .body
+                                .push(ir::Operation::Store(rhs_value, ref_val));
+                        }
                     };
                 }
                 Incr(lhs) | Decr(lhs) => {
@@ -336,8 +339,23 @@ impl<'a> FunctionCodeGen<'a> {
                             self.env
                                 .update_existing_local_variable(cur_label, &var_name, val_res);
                         }
-                        _ => unimplemented!(), // todo
-                                               // todo (ext,arr,str)
+                        _ => {
+                            let (new_label, ref_val) =
+                                self.process_lvalue_ref_expression(&lhs.inner, cur_label);
+                            cur_label = new_label;
+                            let loaded_reg = self.get_new_reg_num();
+                            let changed_reg = self.get_new_reg_num(); // after +/- 1
+                            let body = &mut self.get_block(cur_label).body;
+                            body.push(ir::Operation::Load(loaded_reg, ref_val.clone()));
+                            body.push(ir::Operation::Arithmetic(
+                                changed_reg,
+                                op,
+                                ir::Value::Register(loaded_reg, ir::Type::Int),
+                                ir::Value::LitInt(1),
+                            ));
+                            let changed_value = ir::Value::Register(changed_reg, ir::Type::Int);
+                            body.push(ir::Operation::Store(changed_value, ref_val));
+                        }
                     };
                 }
                 Ret(opt_expr) => {
@@ -481,7 +499,101 @@ impl<'a> FunctionCodeGen<'a> {
                         cur_label = cont_label;
                     }
                 },
-                ForEach { .. } => unimplemented!(), // todo
+                // could be syntax sugar, but it introduces other problems
+                ForEach {
+                    iter_type,
+                    iter_name,
+                    array,
+                    body,
+                } => {
+                    // calculate array
+                    let (new_label, arr_val) = self.process_expression(&array.inner, cur_label);
+                    cur_label = new_label;
+                    let arr_type = arr_val.get_type();
+                    let elem_type = ir::Type::from_ast(&iter_type.inner);
+
+                    // calculate its length
+                    let length_reg = self.get_new_reg_num();
+                    let length_ref_val = self
+                        .generate_calculation_of_ref_to_array_length(cur_label, arr_val.clone());
+                    self.get_block(cur_label)
+                        .body
+                        .push(ir::Operation::Load(length_reg, length_ref_val));
+                    let length_val = ir::Value::Register(length_reg, ir::Type::Int);
+
+                    // calc base+length=end
+                    let end_ptr_reg = self.get_new_reg_num();
+                    self.get_block(cur_label)
+                        .body
+                        .push(ir::Operation::GetElementPtr(
+                            end_ptr_reg,
+                            elem_type.clone(),
+                            arr_val.clone(),
+                            length_val,
+                        ));
+                    let end_ptr_val = ir::Value::Register(end_ptr_reg, arr_type.clone());
+
+                    // loop: while it<end { name=*it; it++; <body> }
+                    let cond_label = self.allocate_new_block(cur_label);
+                    let stub_info =
+                        self.prepare_env_and_stub_phi_set_for_loop_cond(cur_label, cond_label);
+                    let body_label = self.allocate_new_block(cond_label);
+                    let cont_label = self.allocate_new_block(cond_label);
+                    let proxy_label = self.env.create_proxy_env(body_label);
+                    self.add_branch1_op(cur_label, cond_label);
+
+                    // loop cond
+                    let cur_it_reg = self.get_new_reg_num();
+                    let next_it_reg = self.get_new_reg_num();
+                    let cond_reg = self.get_new_reg_num();
+                    let cur_it_val = ir::Value::Register(cur_it_reg, arr_type.clone());
+                    let next_it_val = ir::Value::Register(next_it_reg, arr_type.clone());
+                    let cond_val = ir::Value::Register(cond_reg, ir::Type::Bool);
+                    self.get_block(cond_label).body.push(ir::Operation::Compare(
+                        cond_reg,
+                        ir::CmpOp::LT,
+                        cur_it_val.clone(),
+                        end_ptr_val,
+                    ));
+                    self.add_branch2_op(cond_label, cond_val, body_label, cont_label);
+
+                    // loop body
+                    let loaded_iter_reg = self.get_new_reg_num();
+                    let loaded_iter_val = ir::Value::Register(loaded_iter_reg, elem_type.clone());
+                    self.get_block(body_label)
+                        .body
+                        .push(ir::Operation::Load(loaded_iter_reg, cur_it_val.clone()));
+                    let loop_iter_env_label = self.env.insert_empty_proxy_frame(body_label);
+                    self.env.add_new_local_variable(
+                        loop_iter_env_label,
+                        &iter_name.inner,
+                        loaded_iter_val,
+                    );
+                    self.get_block(body_label)
+                        .body
+                        .push(ir::Operation::GetElementPtr(
+                            next_it_reg,
+                            elem_type,
+                            cur_it_val,
+                            ir::Value::LitInt(1),
+                        ));
+                    let end_body_label = self.process_block(body, body_label, false);
+                    let mut phi_vec = vec![(arr_val, cur_label)]; // for iter ptr
+                    if end_body_label != UNREACHABLE_LABEL {
+                        self.add_branch1_op(end_body_label, cond_label);
+                        phi_vec.push((next_it_val, end_body_label));
+                    }
+                    self.finalize_phi_set_for_loop_cond(
+                        cur_label,
+                        cond_label,
+                        Some(proxy_label),
+                        stub_info,
+                    );
+                    self.get_block(cond_label)
+                        .phi_set
+                        .insert((cur_it_reg, arr_type, phi_vec));
+                    cur_label = cont_label;
+                }
                 Expr(expr) => {
                     let (new_label, _) = self.process_expression(&expr.inner, cur_label);
                     cur_label = new_label;
@@ -489,9 +601,8 @@ impl<'a> FunctionCodeGen<'a> {
                 Error => unreachable!(),
             }
         }
-        // todo (optional) reorder blocks for better LLVM linear code? (note: add info to README)
         // todo (optional) expressions / statements from code in comments (extract from AST)
-        // todo (optional) remove empty blocks
+        // todo (optional) remove empty blocks, merge paths in CFG
 
         cur_label
     }
@@ -583,7 +694,6 @@ impl<'a> FunctionCodeGen<'a> {
                 for a in args {
                     let (new_label, value) = self.process_expression(&a.inner, cur_label);
                     cur_label = new_label;
-                    // todo handle nulls (implicit casts)
                     // todo (ext,str) handle nulls (implicit casts)
                     args_values.push(value);
                 }
@@ -840,40 +950,10 @@ impl<'a> FunctionCodeGen<'a> {
             } => {
                 let (new_label, ptr_value) = self.process_expression(&obj.inner, cur_label);
                 match is_obj_an_array.get() {
-                    Some(true) => {
-                        // reading length
-                        let mut casted_reg: ir::RegNum;
-                        let array_type = ptr_value.get_type();
-                        let elem_type = match &array_type {
-                            ir::Type::Ptr(subtype) => (**subtype).clone(),
-                            _ => unreachable!(),
-                        };
-                        let int_ptr_type = ir::Type::Ptr(Box::new(ir::Type::Int));
-                        match elem_type {
-                            ir::Type::Int => match ptr_value {
-                                ir::Value::Register(reg, _) => casted_reg = reg,
-                                _ => unreachable!(),
-                            },
-                            _ => {
-                                casted_reg = self.get_new_reg_num();
-                                self.get_block(new_label).body.push(ir::Operation::CastPtr {
-                                    dst: casted_reg,
-                                    dst_type: int_ptr_type.clone(),
-                                    src_value: ptr_value,
-                                });
-                            }
-                        }
-                        let result_reg = self.get_new_reg_num();
-                        self.get_block(new_label)
-                            .body
-                            .push(ir::Operation::GetElementPtr(
-                                result_reg,
-                                ir::Type::Int,
-                                ir::Value::Register(casted_reg, int_ptr_type.clone()),
-                                ir::Value::LitInt(-1),
-                            ));
-                        (new_label, ir::Value::Register(result_reg, int_ptr_type))
-                    }
+                    Some(true) => (
+                        new_label,
+                        self.generate_calculation_of_ref_to_array_length(new_label, ptr_value),
+                    ),
                     Some(false) => unimplemented!(), // todo (ext,str)
                     None => unreachable!(),
                 }
@@ -882,6 +962,45 @@ impl<'a> FunctionCodeGen<'a> {
         }
     }
 
+    fn generate_calculation_of_ref_to_array_length(
+        &mut self,
+        cur_label: ir::Label,
+        array_ptr: ir::Value,
+    ) -> ir::Value {
+        let casted_reg: ir::RegNum;
+        let array_type = array_ptr.get_type();
+        let elem_type = match &array_type {
+            ir::Type::Ptr(subtype) => (**subtype).clone(),
+            _ => unreachable!(),
+        };
+        let int_ptr_type = ir::Type::Ptr(Box::new(ir::Type::Int));
+        match elem_type {
+            ir::Type::Int => match array_ptr {
+                ir::Value::Register(reg, _) => casted_reg = reg,
+                _ => unreachable!(),
+            },
+            _ => {
+                casted_reg = self.get_new_reg_num();
+                self.get_block(cur_label).body.push(ir::Operation::CastPtr {
+                    dst: casted_reg,
+                    dst_type: int_ptr_type.clone(),
+                    src_value: array_ptr,
+                });
+            }
+        }
+        let result_reg = self.get_new_reg_num();
+        self.get_block(cur_label)
+            .body
+            .push(ir::Operation::GetElementPtr(
+                result_reg,
+                ir::Type::Int,
+                ir::Value::Register(casted_reg, int_ptr_type.clone()),
+                ir::Value::LitInt(-1),
+            ));
+        ir::Value::Register(result_reg, int_ptr_type)
+    }
+
+    // todo bugfix check at common_succ for multiple preds
     fn calculate_phi_set_for_if(
         &mut self,
         common_pred: ir::Label,
