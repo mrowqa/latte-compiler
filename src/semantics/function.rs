@@ -350,12 +350,9 @@ impl<'a> FunctionContext<'a> {
         let expr_type = self.check_expression_get_type(expr, cur_env)?;
         self.global_ctx
             .check_types_compatibility(expected_expr_type, &expr_type, expr.span)?;
-        match &expr.inner {
-            InnerExpr::LitNull(type_info) => {
-                type_info.replace(Some(expected_expr_type.clone()));
-            }
-            _ => (),
-        };
+        if let InnerExpr::LitNull(type_info) = &expr.inner {
+            type_info.replace(Some(expected_expr_type.clone()));
+        }
         Ok(())
     }
 

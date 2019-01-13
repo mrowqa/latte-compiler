@@ -3,14 +3,15 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 pub struct Program {
-    pub structs: Vec<Struct>,
+    pub classes: Vec<Class>,
     pub functions: Vec<Function>,
     pub global_strings: HashMap<String, GlobalStrNum>,
 }
 
-pub struct Struct {
+pub struct Class {
     pub name: String,
     pub fields: Vec<Type>,
+    pub vtable: Vec<(Type, String)>,
 }
 
 pub struct Function {
@@ -90,7 +91,8 @@ pub enum Type {
     Bool,
     Char,
     Ptr(Box<Type>),
-    Struct(String),
+    Class(String),
+    Func(Box<Type>, Vec<Type>),
 }
 
 impl Value {
@@ -113,10 +115,21 @@ impl Type {
             ast::InnerType::Bool => Type::Bool,
             ast::InnerType::String => Type::Ptr(Box::new(Type::Char)),
             ast::InnerType::Array(subtype) => Type::Ptr(Box::new(Type::from_ast(&subtype))),
-            ast::InnerType::Class(name) => Type::Ptr(Box::new(Type::Struct(name.clone()))),
+            ast::InnerType::Class(name) => Type::Ptr(Box::new(Type::Class(name.clone()))),
             ast::InnerType::Null => Type::Ptr(Box::new(Type::Char)),
             ast::InnerType::Void => Type::Void,
         }
+    }
+
+    pub fn from_fun_def(fun_def: &ast::FunDef) -> Type {
+        Type::Ptr(Box::new(Type::Func(
+            Box::new(Type::from_ast(&fun_def.ret_type.inner)),
+            fun_def
+                .args
+                .iter()
+                .map(|(t, _)| Type::from_ast(&t.inner))
+                .collect(),
+        )))
     }
 }
 
@@ -152,7 +165,9 @@ declare i8*  @_bltn_alloc_array(i32, i32)
         }
         write!(f, "\n\n")?;
 
-        // todo (ext) structs
+        for cl in &self.classes {
+            cl.fmt(f)?;
+        }
 
         for fun in &self.functions {
             fun.fmt(f)?;
@@ -162,10 +177,38 @@ declare i8*  @_bltn_alloc_array(i32, i32)
     }
 }
 
-#[allow(dead_code)] // todo (ext) remove
-impl fmt::Display for Struct {
-    fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
-        unimplemented!() // todo (ext)
+impl fmt::Display for Class {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "%cls.{}.vtable.type = type {{", self.name)?; // todo extract name generation
+        for (i, (f_type, _)) in self.vtable.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", f_type)?;
+        }
+        writeln!(f, "}}")?;
+
+        write!(
+            f,
+            "@cls.{0}.vtable.data = global %cls.{0}.vtable.type {{\n    ",
+            self.name
+        )?; // todo extract name generation
+        for (i, (f_type, f_name)) in self.vtable.iter().enumerate() {
+            if i > 0 {
+                write!(f, ",\n    ")?;
+            }
+            write!(f, "{} @{}", f_type, f_name)?;
+        }
+        writeln!(f, "\n}}")?;
+
+        write!(f, "%cls.{} = type {{", self.name)?;
+        for (i, f_type) in self.fields.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", f_type)?;
+        }
+        writeln!(f, "}}\n")
     }
 }
 
@@ -376,7 +419,19 @@ impl fmt::Display for Type {
             Bool => write!(f, "i1"),
             Char => write!(f, "i8"),
             Ptr(subtype) => write!(f, "{}*", subtype),
-            Struct(name) => write!(f, "%.struct.{}", name),
+            Class(name) => write!(f, "%cls.{}", name), // todo in one place
+            Func(ret_t, args_ts) => {
+                write!(f, "{}(", ret_t)?;
+                for (i, t) in args_ts.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", t)?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
+
+// todo gather @.str.{}, and others, to one place

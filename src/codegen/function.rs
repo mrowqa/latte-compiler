@@ -1,4 +1,4 @@
-use codegen::class::get_size_of;
+use codegen::class::get_size_of_primitive;
 use model::{ast, ir};
 use semantics::global_context::{ClassDesc, GlobalContext};
 use std::collections::{HashMap, HashSet};
@@ -821,7 +821,10 @@ impl<'a> FunctionCodeGen<'a> {
                                 (cur_label, ir::Value::Register(new_reg, ir::Type::Bool))
                             }
                         },
-                        ir::Type::Void | ir::Type::Char | ir::Type::Struct(_) => unreachable!(),
+                        ir::Type::Void
+                        | ir::Type::Char
+                        | ir::Type::Class(_)
+                        | ir::Type::Func(_, _) => unreachable!(),
                     }
                 }
             },
@@ -858,7 +861,7 @@ impl<'a> FunctionCodeGen<'a> {
                 elem_cnt,
             } => {
                 let elem_type_ir = ir::Type::from_ast(&elem_type.inner);
-                let elem_size = get_size_of(&elem_type_ir);
+                let elem_size = get_size_of_primitive(&elem_type_ir);
                 let (new_label, elem_cnt_value) =
                     self.process_expression(&elem_cnt.inner, cur_label);
 
