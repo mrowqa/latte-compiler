@@ -45,10 +45,7 @@ impl<'a> ClassRegistry<'a> {
             ClassDescription::new(&cl.name.inner)
         };
 
-        let vtable_type = ir::Type::Ptr(Box::new(ir::Type::Class(format!(
-            "{}.vtable.type", // todo format in one place
-            cl.name.inner
-        ))));
+        let vtable_type = ir::get_class_vtable_type(&cl.name.inner);
         if cl_desc.class.fields.is_empty() {
             cl_desc.class.fields.push(vtable_type);
         } else {
@@ -65,7 +62,7 @@ impl<'a> ClassRegistry<'a> {
                 }
                 ast::InnerClassItemDef::Method(fun) => {
                     let fun_type = ir::Type::from_fun_def(&fun);
-                    let fun_name = format!("{}.{}", cl.name.inner, fun.name.inner); // todo extract method name creation if in multiple places?
+                    let fun_name = ir::format_method_name(&cl.name.inner, &fun.name.inner);
 
                     // cloned to satisfy borrow checker
                     match cl_desc.methods.get(fun.name.inner.as_str()).cloned() {

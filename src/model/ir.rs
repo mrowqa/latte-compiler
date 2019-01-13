@@ -154,8 +154,8 @@ declare i8*  @_bltn_alloc_array(i32, i32)
         for (k, v) in self.global_strings.iter() {
             writeln!(
                 f,
-                r#"@.str.{} = private constant [{} x i8] c"{}\00""#,
-                v.0,
+                r#"@{} = private constant [{} x i8] c"{}\00""#,
+                format_global_string(v.0),
                 k.len() + 1,
                 k.replace("\\", "\\5C")
                     .replace("\"", "\\22")
@@ -179,7 +179,7 @@ declare i8*  @_bltn_alloc_array(i32, i32)
 
 impl fmt::Display for Class {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "%cls.{}.vtable.type = type {{", self.name)?; // todo extract name generation
+        write!(f, "%{} = type {{", format_class_vtable_type(&self.name))?;
         for (i, (f_type, _)) in self.vtable.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
@@ -190,9 +190,10 @@ impl fmt::Display for Class {
 
         write!(
             f,
-            "@cls.{0}.vtable.data = global %cls.{0}.vtable.type {{\n    ",
-            self.name
-        )?; // todo extract name generation
+            "@{} = global %{} {{\n    ",
+            format_class_vtable_data(&self.name),
+            format_class_vtable_type(&self.name)
+        )?;
         for (i, (f_type, f_name)) in self.vtable.iter().enumerate() {
             if i > 0 {
                 write!(f, ",\n    ")?;
@@ -201,7 +202,7 @@ impl fmt::Display for Class {
         }
         writeln!(f, "\n}}")?;
 
-        write!(f, "%cls.{} = type {{", self.name)?;
+        write!(f, "%{} = type {{", format_class_name(&self.name))?;
         for (i, f_type) in self.fields.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
@@ -341,8 +342,10 @@ impl fmt::Display for Operation {
             CastGlobalString(reg_num, str_len, str_num) => {
                 write!(
                     f,
-                    "%.r{0} = getelementptr [{1} x i8], [{1} x i8]* @.str.{2}, i32 0, i32 0",
-                    reg_num.0, str_len, str_num.0,
+                    "%.r{0} = getelementptr [{1} x i8], [{1} x i8]* @{2}, i32 0, i32 0",
+                    reg_num.0,
+                    str_len,
+                    format_global_string(str_num.0),
                 )?;
             }
             CastPtr {
@@ -405,7 +408,7 @@ impl fmt::Display for Value {
             LitBool(val) => (*val as i32).fmt(f),
             LitNullPtr(_) => "null".fmt(f),
             Register(reg_num, _) => write!(f, "%.r{}", reg_num.0),
-            GlobalRegister(str_num) => write!(f, "@.str.{}", str_num.0),
+            GlobalRegister(str_num) => write!(f, "@{}", format_global_string(str_num.0)),
         }
     }
 }
@@ -419,7 +422,7 @@ impl fmt::Display for Type {
             Bool => write!(f, "i1"),
             Char => write!(f, "i8"),
             Ptr(subtype) => write!(f, "{}*", subtype),
-            Class(name) => write!(f, "%cls.{}", name), // todo in one place
+            Class(name) => write!(f, "%{}", format_class_name(name)),
             Func(ret_t, args_ts) => {
                 write!(f, "{}(", ret_t)?;
                 for (i, t) in args_ts.iter().enumerate() {
@@ -434,4 +437,27 @@ impl fmt::Display for Type {
     }
 }
 
-// todo gather @.str.{}, and others, to one place
+pub fn format_global_string(no: u32) -> String {
+    format!(".str.{}", no)
+}
+
+pub fn format_class_name(name: &str) -> String {
+    format!("cls.{}", name)
+}
+
+pub fn format_class_vtable_type(name: &str) -> String {
+    format!("cls.{}.vtable.type", name)
+}
+
+pub fn get_class_vtable_type(name: &str) -> Type {
+    // note it'll get cls. prefix when using format_class_name
+    Type::Ptr(Box::new(Type::Class(format!("{}.vtable.type", name))))
+}
+
+pub fn format_class_vtable_data(name: &str) -> String {
+    format!("cls.{}.vtable.data", name)
+}
+
+pub fn format_method_name(class_name: &str, method_name: &str) -> String {
+    format!("{}.{}", class_name, method_name)
+}
