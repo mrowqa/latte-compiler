@@ -64,34 +64,37 @@ impl<'a> CodeGen<'a> {
         }
     }
 
-    fn generate_functions_ir(
-        &self,
-        prog_ir: &mut ir::Program,
-        _class_registry: &mut ClassRegistry,
-    ) {
+    fn generate_functions_ir(&self, prog_ir: &mut ir::Program, class_registry: &ClassRegistry) {
         for def in &self.ast.defs {
             match def {
                 ast::TopDef::FunDef(fun) => {
-                    let gfun_cg =
-                        FunctionCodeGen::new(&self.gctx, None, &mut prog_ir.global_strings);
-                    let fun_ir = gfun_cg.generate_function_ir(&fun);
+                    let fun_cg = FunctionCodeGen::new(
+                        &self.gctx,
+                        None,
+                        &mut prog_ir.global_strings,
+                        &class_registry,
+                    );
+                    let fun_ir = fun_cg.generate_function_ir(&fun);
                     prog_ir.functions.push(fun_ir);
                 }
-                ast::TopDef::ClassDef(_cl) => {
-                    // unimplemented!() // todo generate it
-                    // let cl_desc = gctx.get_class_description(&cl.name.inner).expect(err_msg);
-                    // let cl_ctx = FunctionContext::new(Some(cl_desc), &gctx);
-                    // for it in &cl.items {
-                    //     match &it.inner {
-                    //         InnerClassItemDef::Field(_, _) => (),
-                    //         InnerClassItemDef::Method(fun) => {
-                    //             cl_ctx
-                    //                 .analyze_function(&fun)
-                    //                 .accumulate_errors_in(&mut errors);
-                    //         }
-                    //         InnerClassItemDef::Error => unreachable!(),
-                    //     }
-                    // }
+                ast::TopDef::ClassDef(cl) => {
+                    let cl_desc = self.gctx.get_class_description(&cl.name.inner).unwrap();
+                    for it in &cl.items {
+                        match &it.inner {
+                            ast::InnerClassItemDef::Field(_, _) => (),
+                            ast::InnerClassItemDef::Method(fun) => {
+                                let fun_cg = FunctionCodeGen::new(
+                                    &self.gctx,
+                                    Some(cl_desc),
+                                    &mut prog_ir.global_strings,
+                                    &class_registry,
+                                );
+                                let fun_ir = fun_cg.generate_function_ir(&fun);
+                                prog_ir.functions.push(fun_ir);
+                            }
+                            ast::InnerClassItemDef::Error => unreachable!(),
+                        }
+                    }
                 }
                 ast::TopDef::Error => unreachable!(),
             }

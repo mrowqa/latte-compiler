@@ -115,21 +115,24 @@ impl Type {
             ast::InnerType::Bool => Type::Bool,
             ast::InnerType::String => Type::Ptr(Box::new(Type::Char)),
             ast::InnerType::Array(subtype) => Type::Ptr(Box::new(Type::from_ast(&subtype))),
-            ast::InnerType::Class(name) => Type::Ptr(Box::new(Type::Class(name.clone()))),
+            ast::InnerType::Class(name) => Type::from_class_name(&name),
             ast::InnerType::Null => Type::Ptr(Box::new(Type::Char)),
             ast::InnerType::Void => Type::Void,
         }
     }
 
-    pub fn from_fun_def(fun_def: &ast::FunDef) -> Type {
+    pub fn from_method_def(class_name: &str, fun_def: &ast::FunDef) -> Type {
         Type::Ptr(Box::new(Type::Func(
             Box::new(Type::from_ast(&fun_def.ret_type.inner)),
-            fun_def
-                .args
-                .iter()
-                .map(|(t, _)| Type::from_ast(&t.inner))
+            vec![Type::from_class_name(class_name)]
+                .into_iter()
+                .chain(fun_def.args.iter().map(|(t, _)| Type::from_ast(&t.inner)))
                 .collect(),
         )))
+    }
+
+    pub fn from_class_name(class_name: &str) -> Type {
+        Type::Ptr(Box::new(Type::Class(class_name.to_string())))
     }
 }
 
@@ -179,6 +182,15 @@ declare i8*  @_bltn_alloc_array(i32, i32)
 
 impl fmt::Display for Class {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "%{} = type {{", format_class_name(&self.name))?;
+        for (i, f_type) in self.fields.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", f_type)?;
+        }
+        writeln!(f, "}}")?;
+
         write!(f, "%{} = type {{", format_class_vtable_type(&self.name))?;
         for (i, (f_type, _)) in self.vtable.iter().enumerate() {
             if i > 0 {
@@ -200,16 +212,7 @@ impl fmt::Display for Class {
             }
             write!(f, "{} @{}", f_type, f_name)?;
         }
-        writeln!(f, "\n}}")?;
-
-        write!(f, "%{} = type {{", format_class_name(&self.name))?;
-        for (i, f_type) in self.fields.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", f_type)?;
-        }
-        writeln!(f, "}}\n")
+        writeln!(f, "\n}}\n")
     }
 }
 

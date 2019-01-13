@@ -1,4 +1,5 @@
 use codegen::class::get_size_of_primitive;
+use codegen::class::ClassRegistry;
 use model::{ast, ir};
 use semantics::global_context::{ClassDesc, GlobalContext};
 use std::collections::{HashMap, HashSet};
@@ -17,8 +18,8 @@ struct EnvFrame<'a> {
 
 enum ValueWrapper<'a> {
     GlobalOrLocalValue(&'a ir::Value),
-    #[allow(dead_code)] // todo (ext,str) remove
-    ClassValue(()), // todo (ext,str)
+    #[allow(dead_code)] // todo remove
+    ClassValue(()), // todo
 }
 
 struct FunctionInfoWrapper {
@@ -156,7 +157,7 @@ impl<'a> Env<'a> {
             }
         }
 
-        // todo (ext) get class var
+        // todo get class var
         unimplemented!()
         // if let Some(cctx) = ctx.class_ctx {
         //     match cctx.get_item(ctx.global_ctx, name) {
@@ -168,7 +169,7 @@ impl<'a> Env<'a> {
 
     pub fn get_function(&self, name: &str) -> FunctionInfoWrapper {
         if let Some(_cctx) = self.class_ctx {
-            // todo (ext) class method
+            // todo class method
             unimplemented!()
             // match cctx.get_item(ctx.global_ctx, name) {
             //     Some(TypeWrapper::Fun(f)) => return Ok(f),
@@ -199,6 +200,8 @@ impl<'a> Env<'a> {
 
 pub struct FunctionCodeGen<'a> {
     global_strings: &'a mut HashMap<String, ir::GlobalStrNum>,
+    #[allow(dead_code)] // todo remove
+    class_registry: &'a ClassRegistry<'a>,
     env: Env<'a>,
     blocks: Vec<ir::Block>,
     next_reg_num: ir::RegNum,
@@ -209,9 +212,11 @@ impl<'a> FunctionCodeGen<'a> {
         gctx: &'a GlobalContext<'a>,
         cctx: Option<&'a ClassDesc<'a>>,
         global_strings: &'a mut HashMap<String, ir::GlobalStrNum>,
+        class_registry: &'a ClassRegistry<'a>,
     ) -> Self {
         FunctionCodeGen {
             global_strings,
+            class_registry,
             env: Env::new(gctx, cctx),
             blocks: vec![],
             next_reg_num: ir::RegNum(0),
@@ -220,26 +225,48 @@ impl<'a> FunctionCodeGen<'a> {
 
     pub fn generate_function_ir(mut self, fun_def: &'a ast::FunDef) -> ir::Function {
         let mut ir_args = vec![];
-        for (ast_type, ast_ident) in &fun_def.args {
-            let reg_num = self.get_new_reg_num();
-            let arg_type = ir::Type::from_ast(&ast_type.inner);
-            let arg_val = ir::Value::Register(reg_num, arg_type.clone());
-            ir_args.push((reg_num, arg_type));
-            self.env
-                .add_new_local_variable(ARGS_LABEL, ast_ident.inner.as_ref(), arg_val);
-        }
+        let fun_name: String;
+        {
+            let mut add_to_args = |self_: &mut Self, arg_type: ir::Type, arg_name| {
+                let reg_num = self_.get_new_reg_num();
+                let arg_val = ir::Value::Register(reg_num, arg_type.clone());
+                ir_args.push((reg_num, arg_type));
+                self_
+                    .env
+                    .add_new_local_variable(ARGS_LABEL, arg_name, arg_val);
+            };
 
-        let entry_point = self.allocate_new_block(ARGS_LABEL);
-        let last_label = self.process_block(&fun_def.body, entry_point, false);
-        if last_label != UNREACHABLE_LABEL {
-            self.get_block(last_label)
-                .body
-                .push(ir::Operation::Return(None));
+            if let Some(cctx) = self.env.class_ctx {
+                fun_name = ir::format_method_name(cctx.get_name(), &fun_def.name.inner);
+                add_to_args(
+                    &mut self,
+                    ir::Type::from_class_name(cctx.get_name()),
+                    ".this",
+                ); // todo correct frontend to work with "this" variable
+            } else {
+                fun_name = fun_def.name.inner.to_string();
+            }
+
+            for (ast_type, ast_ident) in &fun_def.args {
+                add_to_args(
+                    &mut self,
+                    ir::Type::from_ast(&ast_type.inner),
+                    ast_ident.inner.as_ref(),
+                );
+            }
+
+            let entry_point = self.allocate_new_block(ARGS_LABEL);
+            let last_label = self.process_block(&fun_def.body, entry_point, false);
+            if last_label != UNREACHABLE_LABEL {
+                self.get_block(last_label)
+                    .body
+                    .push(ir::Operation::Return(None));
+            }
         }
 
         ir::Function {
             ret_type: ir::Type::from_ast(&fun_def.ret_type.inner),
-            name: fun_def.name.inner.clone(),
+            name: fun_name,
             args: ir_args,
             blocks: self.blocks,
         }
@@ -329,7 +356,7 @@ impl<'a> FunctionCodeGen<'a> {
                             let new_reg = self.get_new_reg_num();
                             let val_l = match self.env.get_variable(cur_label, var_name) {
                                 ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
-                                ValueWrapper::ClassValue(_) => unimplemented!(), // todo (ext,str)
+                                ValueWrapper::ClassValue(_) => unimplemented!(), // todo
                             };
                             let val_r = ir::Value::LitInt(1);
                             self.get_block(cur_label)
@@ -648,7 +675,7 @@ impl<'a> FunctionCodeGen<'a> {
             LitVar(var_name) => {
                 match self.env.get_variable(cur_label, var_name) {
                     ValueWrapper::GlobalOrLocalValue(value) => (cur_label, value.clone()),
-                    ValueWrapper::ClassValue(_) => unimplemented!(), // todo (ext)
+                    ValueWrapper::ClassValue(_) => unimplemented!(), // todo
                 }
             }
             LitInt(int_val) => (cur_label, ir::Value::LitInt(*int_val)),
@@ -688,7 +715,7 @@ impl<'a> FunctionCodeGen<'a> {
                 let info = self.env.get_function(function_name.inner.as_ref());
                 let mut args_values = vec![];
                 if info.is_class_method {
-                    // todo (ext,str) add "this" ptr to args
+                    // todo add "this" ptr to args
                     unimplemented!()
                 }
 
@@ -696,7 +723,7 @@ impl<'a> FunctionCodeGen<'a> {
                 for a in args {
                     let (new_label, value) = self.process_expression(&a.inner, cur_label);
                     cur_label = new_label;
-                    // todo (ext,str) handle nulls (implicit casts)
+                    // todo handle nulls + subclasses (implicit casts)
                     args_values.push(value);
                 }
 
@@ -888,7 +915,7 @@ impl<'a> FunctionCodeGen<'a> {
                 )
             }
             ArrayElem { .. } => {
-                // todo (ext,str) refactor; is it same as ObjField?
+                // todo refactor; is it same as ObjField?
                 let (new_label, elem_ref_value) =
                     self.process_lvalue_ref_expression(expr, cur_label);
                 let new_reg = self.get_new_reg_num();
@@ -901,7 +928,7 @@ impl<'a> FunctionCodeGen<'a> {
                     .push(ir::Operation::Load(new_reg, elem_ref_value));
                 (new_label, ir::Value::Register(new_reg, elem_type))
             }
-            NewObject(_) => unimplemented!(), // todo (ext,str)
+            NewObject(_) => unimplemented!(), // todo
             ObjField {
                 is_obj_an_array, ..
             } => {
@@ -914,11 +941,11 @@ impl<'a> FunctionCodeGen<'a> {
                             .push(ir::Operation::Load(reg, ptr_value));
                         (new_label, ir::Value::Register(reg, ir::Type::Int))
                     }
-                    Some(false) => unimplemented!(), // todo (ext,str)
+                    Some(false) => unimplemented!(), // todo
                     None => unreachable!(),
                 }
             }
-            ObjMethodCall { .. } => unimplemented!(), // todo (ext,str)
+            ObjMethodCall { .. } => unimplemented!(), // todo
         }
     }
 
@@ -959,7 +986,7 @@ impl<'a> FunctionCodeGen<'a> {
                         new_label,
                         self.generate_calculation_of_ref_to_array_length(new_label, ptr_value),
                     ),
-                    Some(false) => unimplemented!(), // todo (ext,str)
+                    Some(false) => unimplemented!(), // todo
                     None => unreachable!(),
                 }
             }

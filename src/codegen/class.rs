@@ -61,7 +61,7 @@ impl<'a> ClassRegistry<'a> {
                     cl_desc.fields.insert(&f_name.inner, new_idx);
                 }
                 ast::InnerClassItemDef::Method(fun) => {
-                    let fun_type = ir::Type::from_fun_def(&fun);
+                    let fun_type = ir::Type::from_method_def(&cl.name.inner, &fun);
                     let fun_name = ir::format_method_name(&cl.name.inner, &fun.name.inner);
 
                     // cloned to satisfy borrow checker

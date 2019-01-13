@@ -363,6 +363,10 @@ impl<'a> ClassDesc<'a> {
             },
         }
     }
+
+    pub fn get_name(&self) -> &'a str {
+        self.name
+    }
 }
 
 impl<'a> FunDesc<'a> {
