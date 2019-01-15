@@ -241,8 +241,8 @@ impl<'a> FunctionCodeGen<'a> {
                 add_to_args(
                     &mut self,
                     ir::Type::from_class_name(cctx.get_name()),
-                    ".this",
-                ); // todo correct frontend to work with "this" variable
+                    ".this", // todo correct frontend to work with "this" variable
+                );
             } else {
                 fun_name = fun_def.name.inner.to_string();
             }
@@ -557,8 +557,7 @@ impl<'a> FunctionCodeGen<'a> {
                         .push(ir::Operation::GetElementPtr(
                             end_ptr_reg,
                             elem_type.clone(),
-                            arr_val.clone(),
-                            length_val,
+                            vec![arr_val.clone(), length_val],
                         ));
                     let end_ptr_val = ir::Value::Register(end_ptr_reg, arr_type.clone());
 
@@ -603,8 +602,7 @@ impl<'a> FunctionCodeGen<'a> {
                         .push(ir::Operation::GetElementPtr(
                             next_it_reg,
                             elem_type,
-                            cur_it_val,
-                            ir::Value::LitInt(1),
+                            vec![cur_it_val, ir::Value::LitInt(1)],
                         ));
                     let end_body_label = self.process_block(body, body_label, false);
                     let mut phi_vec = vec![(arr_val, cur_label)]; // for iter ptr
@@ -688,13 +686,13 @@ impl<'a> FunctionCodeGen<'a> {
                     let reg_num = self.get_new_reg_num();
                     let str_ir_val = self.get_global_string(str_val);
                     match str_ir_val {
-                        ir::Value::GlobalRegister(str_num) => {
+                        ir::Value::GlobalRegister(_, _) => {
                             self.get_block(cur_label)
                                 .body
                                 .push(ir::Operation::CastGlobalString(
                                     reg_num,
                                     str_val.len() + 1,
-                                    str_num,
+                                    str_ir_val,
                                 ))
                         }
                         _ => unreachable!(),
@@ -928,7 +926,87 @@ impl<'a> FunctionCodeGen<'a> {
                     .push(ir::Operation::Load(new_reg, elem_ref_value));
                 (new_label, ir::Value::Register(new_reg, elem_type))
             }
-            NewObject(_) => unimplemented!(), // todo
+            NewObject(class_type) => {
+                // "it's an optimization - inlined constructor"
+                match &class_type.inner {
+                    ast::InnerType::Class(class_name) => {
+                        let class_type = ir::Type::Class(class_name.to_string());
+                        let class_type_ptr = ir::Type::Ptr(Box::new(class_type.clone()));
+
+                        // calc object size
+                        let size_ptr_reg = self.get_new_reg_num();
+                        let size_int_reg = self.get_new_reg_num();
+                        self.get_block(cur_label)
+                            .body
+                            .push(ir::Operation::GetElementPtr(
+                                size_ptr_reg,
+                                class_type.clone(),
+                                vec![
+                                    ir::Value::LitNullPtr(Some(class_type_ptr.clone())),
+                                    ir::Value::LitInt(1),
+                                ],
+                            ));
+                        self.get_block(cur_label)
+                            .body
+                            .push(ir::Operation::CastPtrToInt {
+                                dst: size_int_reg,
+                                src_value: ir::Value::Register(
+                                    size_ptr_reg,
+                                    class_type_ptr.clone(),
+                                ),
+                            });
+
+                        // malloc
+                        let allocd_void_ptr_reg = self.get_new_reg_num();
+                        let allocd_cl_ptr_reg = self.get_new_reg_num();
+                        let allocd_cl_ptr_val =
+                            ir::Value::Register(allocd_cl_ptr_reg, class_type_ptr.clone());
+                        let void_ptr_type = ir::Type::Ptr(Box::new(ir::Type::Char));
+                        self.get_block(cur_label)
+                            .body
+                            .push(ir::Operation::FunctionCall(
+                                Some(allocd_void_ptr_reg),
+                                void_ptr_type.clone(),
+                                "_bltn_malloc".to_string(),
+                                vec![ir::Value::Register(size_int_reg, ir::Type::Int)],
+                            ));
+                        self.get_block(cur_label).body.push(ir::Operation::CastPtr {
+                            dst: allocd_cl_ptr_reg,
+                            dst_type: class_type_ptr.clone(),
+                            src_value: ir::Value::Register(allocd_void_ptr_reg, void_ptr_type),
+                        });
+
+                        // set vtable
+                        let vtable_ptr_reg = self.get_new_reg_num();
+                        let vtable_type = ir::get_class_vtable_type(class_name);
+                        let vtable_val = ir::Value::GlobalRegister(
+                            ir::format_class_vtable_data(class_name),
+                            vtable_type.clone(),
+                        );
+                        self.get_block(cur_label)
+                            .body
+                            .push(ir::Operation::GetElementPtr(
+                                vtable_ptr_reg,
+                                class_type,
+                                vec![
+                                    allocd_cl_ptr_val.clone(),
+                                    ir::Value::LitInt(0),
+                                    ir::Value::LitInt(0),
+                                ],
+                            ));
+                        self.get_block(cur_label).body.push(ir::Operation::Store(
+                            vtable_val,
+                            ir::Value::Register(
+                                vtable_ptr_reg,
+                                ir::Type::Ptr(Box::new(vtable_type)),
+                            ),
+                        ));
+
+                        (cur_label, allocd_cl_ptr_val)
+                    }
+                    _ => unreachable!(),
+                }
+            }
             ObjField {
                 is_obj_an_array, ..
             } => {
@@ -970,8 +1048,7 @@ impl<'a> FunctionCodeGen<'a> {
                     .push(ir::Operation::GetElementPtr(
                         new_reg,
                         elem_type,
-                        array_value,
-                        index_value,
+                        vec![array_value, index_value],
                     ));
                 (new_label, ir::Value::Register(new_reg, array_type))
             }
@@ -1026,8 +1103,10 @@ impl<'a> FunctionCodeGen<'a> {
             .push(ir::Operation::GetElementPtr(
                 result_reg,
                 ir::Type::Int,
-                ir::Value::Register(casted_reg, int_ptr_type.clone()),
-                ir::Value::LitInt(-1),
+                vec![
+                    ir::Value::Register(casted_reg, int_ptr_type.clone()),
+                    ir::Value::LitInt(-1),
+                ],
             ));
         ir::Value::Register(result_reg, int_ptr_type)
     }
@@ -1179,12 +1258,13 @@ impl<'a> FunctionCodeGen<'a> {
     }
 
     fn get_global_string(&mut self, string: &str) -> ir::Value {
-        if let Some(reg) = self.global_strings.get(string) {
-            return ir::Value::GlobalRegister(*reg);
+        let str_type = ir::Type::Ptr(Box::new(ir::Type::Char));
+        if let Some(num) = self.global_strings.get(string) {
+            return ir::Value::GlobalRegister(ir::format_global_string(*num), str_type);
         }
 
         let reg = ir::GlobalStrNum(self.global_strings.len() as u32);
         self.global_strings.insert(string.to_string(), reg);
-        ir::Value::GlobalRegister(reg)
+        ir::Value::GlobalRegister(ir::format_global_string(reg), str_type)
     }
 }

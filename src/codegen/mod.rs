@@ -25,7 +25,7 @@ impl<'a> CodeGen<'a> {
         let mut class_registry = ClassRegistry::new();
 
         self.calculate_class_registry(&mut class_registry);
-        self.generate_functions_ir(&mut prog_ir, &mut class_registry);
+        self.generate_functions_ir(&mut prog_ir, &class_registry);
         class_registry.insert_classes_ir_into(&mut prog_ir);
 
         prog_ir

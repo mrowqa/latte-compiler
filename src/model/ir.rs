@@ -27,6 +27,7 @@ pub struct Label(pub u32);
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct RegNum(pub u32);
 
+// consider replacing it with just a String
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct GlobalStrNum(pub u32);
 
@@ -45,11 +46,15 @@ pub enum Operation {
     FunctionCall(Option<RegNum>, Type, String, Vec<Value>),
     Arithmetic(RegNum, ArithOp, Value, Value),
     Compare(RegNum, CmpOp, Value, Value),
-    GetElementPtr(RegNum, Type, Value, Value),
-    CastGlobalString(RegNum, usize, GlobalStrNum), // usize is string length
+    GetElementPtr(RegNum, Type, Vec<Value>),
+    CastGlobalString(RegNum, usize, Value), // usize is string length
     CastPtr {
         dst: RegNum,
         dst_type: Type,
+        src_value: Value,
+    },
+    CastPtrToInt {
+        dst: RegNum,
         src_value: Value,
     },
     Load(RegNum, Value),
@@ -81,7 +86,7 @@ pub enum Value {
     LitBool(bool),
     LitNullPtr(Option<Type>),
     Register(RegNum, Type),
-    GlobalRegister(GlobalStrNum),
+    GlobalRegister(String, Type),
 }
 
 #[derive(PartialEq, Eq, Hash, Clone)]
@@ -102,8 +107,7 @@ impl Value {
             Value::LitBool(_) => Type::Bool,
             Value::LitNullPtr(Some(t)) => t.clone(),
             Value::LitNullPtr(None) => Type::Ptr(Box::new(Type::Char)), // void* is illegal in llvm
-            Value::Register(_, t) => t.clone(),
-            Value::GlobalRegister(_) => Type::Ptr(Box::new(Type::Char)),
+            Value::Register(_, t) | Value::GlobalRegister(_, t) => t.clone(),
         }
     }
 }
@@ -158,7 +162,7 @@ declare i8*  @_bltn_alloc_array(i32, i32)
             writeln!(
                 f,
                 r#"@{} = private constant [{} x i8] c"{}\00""#,
-                format_global_string(v.0),
+                format_global_string(*v),
                 k.len() + 1,
                 k.replace("\\", "\\5C")
                     .replace("\"", "\\22")
@@ -202,7 +206,7 @@ impl fmt::Display for Class {
 
         write!(
             f,
-            "@{} = global %{} {{\n    ",
+            "@{} = private global %{} {{\n    ",
             format_class_vtable_data(&self.name),
             format_class_vtable_type(&self.name)
         )?;
@@ -330,25 +334,17 @@ impl fmt::Display for Operation {
                     reg_num.0, op_str, val_type, val1, val2
                 )?;
             }
-            GetElementPtr(reg_num, elem_type, ptr_val, ind_val) => {
-                write!(
-                    f,
-                    "%.r{} = getelementptr {}, {} {}, {} {}",
-                    reg_num.0,
-                    elem_type,
-                    ptr_val.get_type(),
-                    ptr_val,
-                    ind_val.get_type(),
-                    ind_val,
-                )?;
+            GetElementPtr(reg_num, elem_type, vals) => {
+                write!(f, "%.r{} = getelementptr {}", reg_num.0, elem_type)?;
+                for val in vals {
+                    write!(f, ", {} {}", val.get_type(), val)?;
+                }
             }
-            CastGlobalString(reg_num, str_len, str_num) => {
+            CastGlobalString(reg_num, str_len, str_val) => {
                 write!(
                     f,
-                    "%.r{0} = getelementptr [{1} x i8], [{1} x i8]* @{2}, i32 0, i32 0",
-                    reg_num.0,
-                    str_len,
-                    format_global_string(str_num.0),
+                    "%.r{0} = getelementptr [{1} x i8], [{1} x i8]* {2}, i32 0, i32 0",
+                    reg_num.0, str_len, str_val,
                 )?;
             }
             CastPtr {
@@ -364,6 +360,16 @@ impl fmt::Display for Operation {
                     f,
                     "%.r{} = bitcast {} %.r{} to {}",
                     dst.0, val_type, val_reg.0, dst_type
+                )?;
+            }
+            CastPtrToInt { dst, src_value } => {
+                write!(
+                    f,
+                    "%.r{} = ptrtoint {} {} to {}",
+                    dst.0,
+                    src_value.get_type(),
+                    src_value,
+                    Type::Int,
                 )?;
             }
             Load(reg_num, value) => {
@@ -411,7 +417,7 @@ impl fmt::Display for Value {
             LitBool(val) => (*val as i32).fmt(f),
             LitNullPtr(_) => "null".fmt(f),
             Register(reg_num, _) => write!(f, "%.r{}", reg_num.0),
-            GlobalRegister(str_num) => write!(f, "@{}", format_global_string(str_num.0)),
+            GlobalRegister(reg_name, _) => write!(f, "@{}", reg_name),
         }
     }
 }
@@ -440,8 +446,8 @@ impl fmt::Display for Type {
     }
 }
 
-pub fn format_global_string(no: u32) -> String {
-    format!(".str.{}", no)
+pub fn format_global_string(no: GlobalStrNum) -> String {
+    format!(".str.{}", no.0)
 }
 
 pub fn format_class_name(name: &str) -> String {

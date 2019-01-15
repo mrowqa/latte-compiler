@@ -74,6 +74,13 @@ while (it < end) {
 - programista odpowiada za weryfikacje, czy referencja do obiektu lub tablicy
   nie jest nullem, wpp. zachowanie jest niezdefiniowane (prawdopodobnie bedzie
   segfault),
+- jesli elementami tablicy sa obiekty klasy lub inne tablice (tablice
+  wielowymiarowe), to sa one przechowywane przez referencje i domyslnie
+  zerowane:
+```
+MyClass[] arr = new MyClass[42];
+arr[4] == null
+```
 - string jest typem referencyjnym, ale semantycznie nigdy nie jest nullem
   (domyslnie jest napisem pustym); jednakze napis pusty jest reprezentowany
   w implementacji przez wskaznik na adres 0,
