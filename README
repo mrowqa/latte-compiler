@@ -79,7 +79,12 @@ while (it < end) {
   zerowane:
 ```
 MyClass[] arr = new MyClass[42];
-arr[4] == null
+// typeof(arr[4]) == MyClass
+// arr[4] == null // domyslna wartosc
+
+int[][] v = new int[][42];
+// typeof(v[2]) == int[]
+// v[2] == null // domyslna wartosc
 ```
 - string jest typem referencyjnym, ale semantycznie nigdy nie jest nullem
   (domyslnie jest napisem pustym); jednakze napis pusty jest reprezentowany
@@ -105,12 +110,6 @@ void bar() {return foo();}
   parsowania (mozna dostac syntax error i obok dzielenie przez 0),
 - optymalizacja: inkrementacja i dekrementacja (operatory ++ i --)
   np. `a.[4]++` tylko raz obliczy adres elementu `a.[4]`,
-- tablice moga byc wielowymiarowe:
-```
-int[][] v = new int[][42];
-// typeof(v[0]) == int[]
-// v[0] == null // domyslna wartosc
-```
 - optymalizacja: dla tablic wykonuje tylko jedna alokacje; pole length
   znajduje sie w pamieci tuz przed elementami tablicy,
 - generowany kod jest w postaci SSA: wszystkie zmienne lokalne
@@ -151,3 +150,15 @@ Drobne uwagi
 
 Opis kompilacji runtime'u znajduje sie w `compile-runtime.sh`
 Opis kompilacji reszty znajduje sie w `src/main.rs`
+
+
+// todo make frontend able to make changes in AST
+- (will it work with all the borrowing? worst case -> Cell instead of Box)
+- insert casts - 2/5
+- insert "this" to methods envs (generally handle it) - 3/5
+- insert "this" everywhere to vars and methods calls - 4/5 // fix printing LLVM code, etc
+- (optimize if/while true/false) - 1/5
+- (rename variables -> get rid of proxy env) 4/5
+- correct README 1/5
+
+Then continue with codegen.
