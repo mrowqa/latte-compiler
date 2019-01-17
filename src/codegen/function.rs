@@ -5,8 +5,8 @@ use semantics::global_context::{ClassDesc, GlobalContext};
 use std::collections::{HashMap, HashSet};
 
 struct Env<'a> {
-    global_ctx: &'a GlobalContext<'a>,
-    class_ctx: Option<&'a ClassDesc<'a>>,
+    global_ctx: &'a GlobalContext,
+    class_ctx: Option<&'a ClassDesc>,
     frames: HashMap<ir::Label, EnvFrame<'a>>,
     next_proxy_frame: ir::Label,
 }
@@ -31,7 +31,7 @@ const ARGS_LABEL: ir::Label = ir::Label(std::u32::MAX);
 const UNREACHABLE_LABEL: ir::Label = ir::Label(std::u32::MAX - 1);
 
 impl<'a> Env<'a> {
-    pub fn new(gctx: &'a GlobalContext<'a>, cctx: Option<&'a ClassDesc<'a>>) -> Env<'a> {
+    pub fn new(gctx: &'a GlobalContext, cctx: Option<&'a ClassDesc>) -> Env<'a> {
         let mut frames = HashMap::new();
         frames.insert(
             ARGS_LABEL,
@@ -209,8 +209,8 @@ pub struct FunctionCodeGen<'a> {
 
 impl<'a> FunctionCodeGen<'a> {
     pub fn new(
-        gctx: &'a GlobalContext<'a>,
-        cctx: Option<&'a ClassDesc<'a>>,
+        gctx: &'a GlobalContext,
+        cctx: Option<&'a ClassDesc>,
         global_strings: &'a mut HashMap<String, ir::GlobalStrNum>,
         class_registry: &'a ClassRegistry<'a>,
     ) -> Self {

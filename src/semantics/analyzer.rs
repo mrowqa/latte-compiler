@@ -4,12 +4,12 @@ use frontend_error::{ok_if_no_error, ErrorAccumulation, FrontendError, FrontendR
 use model::ast::*;
 
 pub struct SemanticAnalyzer<'a> {
-    ast: &'a Program,
-    ctx: Option<GlobalContext<'a>>,
+    ast: &'a mut Program,
+    ctx: Option<GlobalContext>,
 }
 
 impl<'a> SemanticAnalyzer<'a> {
-    pub fn new(prog: &'a Program) -> Self {
+    pub fn new(prog: &'a mut Program) -> Self {
         SemanticAnalyzer {
             ast: prog,
             ctx: None,
@@ -22,8 +22,8 @@ impl<'a> SemanticAnalyzer<'a> {
         self.check_main_signature()
     }
 
-    pub fn get_global_ctx(&self) -> Option<&GlobalContext<'a>> {
-        self.ctx.as_ref()
+    pub fn get_global_ctx(self) -> Option<GlobalContext> {
+        self.ctx
     }
 
     fn calculate_global_context(&mut self) -> FrontendResult<()> {
@@ -31,7 +31,7 @@ impl<'a> SemanticAnalyzer<'a> {
             return Ok(());
         }
 
-        match GlobalContext::from(self.ast) {
+        match GlobalContext::from(&self.ast) {
             Ok(ctx) => {
                 self.ctx = Some(ctx);
                 Ok(())

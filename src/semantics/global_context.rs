@@ -2,30 +2,30 @@ use frontend_error::{ok_if_no_error, ErrorAccumulation, FrontendError, FrontendR
 use model::ast::*;
 use std::collections::HashMap;
 
-pub struct GlobalContext<'a> {
-    classes: HashMap<&'a str, ClassDesc<'a>>,
-    functions: HashMap<&'a str, FunDesc<'a>>,
+pub struct GlobalContext {
+    classes: HashMap<String, ClassDesc>,
+    functions: HashMap<String, FunDesc>,
 }
 
-pub struct ClassDesc<'a> {
-    name: &'a str,
-    parent_type: Option<&'a Type>,
-    items: HashMap<&'a str, TypeWrapper<'a>>,
+pub struct ClassDesc {
+    name: String,
+    parent_type: Option<Type>,
+    items: HashMap<String, TypeWrapper>,
 }
 
-pub enum TypeWrapper<'a> {
-    Var(&'a Type),
-    Fun(FunDesc<'a>),
+pub enum TypeWrapper {
+    Var(Type),
+    Fun(FunDesc),
 }
 
-pub struct FunDesc<'a> {
+pub struct FunDesc {
     // todo (optional) use getters instead of pub fields?
-    pub ret_type: &'a Type,
-    pub name: &'a str,
-    pub args_types: Vec<&'a Type>,
+    pub ret_type: Type,
+    pub name: String,
+    pub args_types: Vec<Type>,
 }
 
-impl<'a> GlobalContext<'a> {
+impl GlobalContext {
     fn new_with_builtins() -> Self {
         GlobalContext {
             classes: HashMap::new(),
@@ -33,7 +33,7 @@ impl<'a> GlobalContext<'a> {
         }
     }
 
-    pub fn from(prog: &'a Program) -> FrontendResult<Self> {
+    pub fn from(prog: &Program) -> FrontendResult<Self> {
         let mut result = GlobalContext::new_with_builtins();
         let mut errors = vec![];
         result
@@ -50,26 +50,30 @@ impl<'a> GlobalContext<'a> {
         }
     }
 
-    pub fn get_class_description(&self, cl_name: &str) -> Option<&ClassDesc<'a>> {
+    pub fn get_class_description(&self, cl_name: &str) -> Option<&ClassDesc> {
         self.classes.get(cl_name)
     }
 
-    pub fn get_function_description(&self, fun_name: &str) -> Option<&FunDesc<'a>> {
+    pub fn get_function_description(&self, fun_name: &str) -> Option<&FunDesc> {
         self.functions.get(fun_name)
     }
 
-    fn scan_global_defenitions(&mut self, prog: &'a Program) -> FrontendResult<()> {
+    fn scan_global_defenitions(&mut self, prog: &Program) -> FrontendResult<()> {
         let mut errors = vec![];
         for def in &prog.defs {
             match def {
                 TopDef::FunDef(fun) => {
                     let fun_desc = FunDesc::from(&fun);
-                    if self.classes.get(fun_desc.name).is_some() {
+                    if self.classes.get(&fun_desc.name).is_some() {
                         errors.push(FrontendError {
                             err: "Error: class with same name already defined".to_string(),
                             span: fun.name.span,
                         });
-                    } else if self.functions.insert(fun_desc.name, fun_desc).is_some() {
+                    } else if self
+                        .functions
+                        .insert(fun_desc.name.to_string(), fun_desc)
+                        .is_some()
+                    {
                         errors.push(FrontendError {
                             err: "Error: function redefinition".to_string(),
                             span: fun.name.span,
@@ -80,13 +84,13 @@ impl<'a> GlobalContext<'a> {
                     let class_desc_res = ClassDesc::from(&cl);
                     match class_desc_res {
                         Ok(desc) => {
-                            if self.functions.get(desc.name).is_some() {
+                            if self.functions.get(&desc.name).is_some() {
                                 errors.push(FrontendError {
                                     err: "Error: function with same name already defined"
                                         .to_string(),
                                     span: cl.name.span,
                                 });
-                            } else if self.classes.insert(desc.name, desc).is_some() {
+                            } else if self.classes.insert(desc.name.to_string(), desc).is_some() {
                                 errors.push(FrontendError {
                                     err: "Error: class redefinition".to_string(),
                                     span: cl.name.span,
@@ -175,7 +179,7 @@ impl<'a> GlobalContext<'a> {
                     err: "Error: detected cycle in inheritance chain".to_string(),
                     span: span,
                 }])
-            } else if let Some(t) = cl.parent_type {
+            } else if let Some(t) = &cl.parent_type {
                 match &t.inner {
                     InnerType::Class(parent_name) => {
                         self.check_for_inheritance_cycle(start_name, &parent_name, span)
@@ -195,8 +199,8 @@ impl<'a> GlobalContext<'a> {
 
     pub fn check_types_compatibility(
         &self,
-        lhs: &'a InnerType,
-        rhs: &'a InnerType,
+        lhs: &InnerType,
+        rhs: &InnerType,
         span: Span,
     ) -> FrontendResult<()> {
         use self::InnerType::{Array, Class, Null};
@@ -225,7 +229,7 @@ impl<'a> GlobalContext<'a> {
             .expect("assumption: tree made by our parser");
         if cl_desc.name == superclass {
             true
-        } else if let Some(t) = cl_desc.parent_type {
+        } else if let Some(t) = &cl_desc.parent_type {
             match &t.inner {
                 InnerType::Class(parent_name) => self.check_if_subclass(superclass, &parent_name),
                 _ => unreachable!(), // assumption: tree made by our parser
@@ -236,18 +240,18 @@ impl<'a> GlobalContext<'a> {
     }
 }
 
-impl<'a> ClassDesc<'a> {
-    pub fn from(cldef: &'a ClassDef) -> FrontendResult<Self> {
+impl ClassDesc {
+    pub fn from(cldef: &ClassDef) -> FrontendResult<Self> {
         let mut errors = vec![];
         let mut result = ClassDesc {
-            name: &cldef.name.inner,
-            parent_type: cldef.parent_type.as_ref(),
+            name: cldef.name.inner.to_string(),
+            parent_type: cldef.parent_type.clone(),
             items: HashMap::new(),
         };
 
         // scope for the closure which borrows errors
         {
-            let mut add_or_error = |name: &'a str, t: TypeWrapper<'a>, span: Span| {
+            let mut add_or_error = |name: String, t: TypeWrapper, span: Span| {
                 if result.items.insert(name, t).is_some() {
                     errors.push(FrontendError {
                         err: "Error: class item redefinition".to_string(),
@@ -259,11 +263,15 @@ impl<'a> ClassDesc<'a> {
             for item in &cldef.items {
                 match &item.inner {
                     InnerClassItemDef::Field(t, id) => {
-                        add_or_error(&id.inner, TypeWrapper::Var(t), item.span)
+                        add_or_error(id.inner.to_string(), TypeWrapper::Var(t.clone()), item.span)
                     }
                     InnerClassItemDef::Method(fun) => {
                         let fun_desc = FunDesc::from(&fun);
-                        add_or_error(fun_desc.name, TypeWrapper::Fun(fun_desc), fun.name.span)
+                        add_or_error(
+                            fun_desc.name.to_string(),
+                            TypeWrapper::Fun(fun_desc),
+                            fun.name.span,
+                        )
                     }
                     InnerClassItemDef::Error => unreachable!(),
                 }
@@ -277,11 +285,11 @@ impl<'a> ClassDesc<'a> {
         }
     }
 
-    pub fn check_types(&self, ctx: &GlobalContext<'a>) -> FrontendResult<()> {
+    pub fn check_types(&self, ctx: &GlobalContext) -> FrontendResult<()> {
         let mut errors = vec![];
-        let parent_desc = match self.parent_type {
+        let parent_desc = match &self.parent_type {
             Some(t) => {
-                ctx.check_superclass_type(t, self.name)
+                ctx.check_superclass_type(&t, &self.name)
                     .accumulate_errors_in(&mut errors);
                 match (errors.is_empty(), &t.inner) {
                     (true, InnerType::Class(parent_name)) => ctx.get_class_description(parent_name),
@@ -341,11 +349,11 @@ impl<'a> ClassDesc<'a> {
         ok_if_no_error(errors)
     }
 
-    pub fn get_item(
-        &self,
-        global_ctx: &'a GlobalContext<'a>,
+    pub fn get_item<'a>(
+        &'a self,
+        global_ctx: &'a GlobalContext,
         name: &str,
-    ) -> Option<&TypeWrapper<'a>> {
+    ) -> Option<&'a TypeWrapper> {
         match self.items.get(name) {
             Some(it) => Some(it),
             None => match &self.parent_type {
@@ -364,23 +372,23 @@ impl<'a> ClassDesc<'a> {
         }
     }
 
-    pub fn get_name(&self) -> &'a str {
-        self.name
+    pub fn get_name(&self) -> &str {
+        &self.name
     }
 }
 
-impl<'a> FunDesc<'a> {
-    pub fn from(fundef: &'a FunDef) -> Self {
+impl FunDesc {
+    pub fn from(fundef: &FunDef) -> Self {
         FunDesc {
-            ret_type: &fundef.ret_type,
-            name: &fundef.name.inner,
-            args_types: fundef.args.iter().map(|(t, _)| t).collect(),
+            ret_type: fundef.ret_type.clone(),
+            name: fundef.name.inner.to_string(),
+            args_types: fundef.args.iter().map(|(t, _)| t.clone()).collect(),
         }
     }
 
-    pub fn check_types(&self, ctx: &GlobalContext<'a>) -> FrontendResult<()> {
+    pub fn check_types(&self, ctx: &GlobalContext) -> FrontendResult<()> {
         let mut errors = vec![];
-        ctx.check_ret_type(self.ret_type)
+        ctx.check_ret_type(&self.ret_type)
             .accumulate_errors_in(&mut errors);
         for t in &self.args_types {
             ctx.check_local_var_type(t)
@@ -390,7 +398,7 @@ impl<'a> FunDesc<'a> {
         ok_if_no_error(errors)
     }
 
-    pub fn does_signature_match(&self, rhs: &FunDesc<'_>) -> bool {
+    pub fn does_signature_match(&self, rhs: &FunDesc) -> bool {
         if self.ret_type.inner != rhs.ret_type.inner
             || self.name != rhs.name
             || self.args_types.len() != rhs.args_types.len()
@@ -411,58 +419,58 @@ impl<'a> FunDesc<'a> {
 // --------------------------------------------------------
 // ----------------- builtins -----------------------------
 // --------------------------------------------------------
-fn get_builtin_functions() -> HashMap<&'static str, FunDesc<'static>> {
-    let t_void = &Type {
+fn get_builtin_functions() -> HashMap<String, FunDesc> {
+    let t_void = Type {
         inner: InnerType::Void,
         span: EMPTY_SPAN,
     };
-    let t_int = &Type {
+    let t_int = Type {
         inner: InnerType::Int,
         span: EMPTY_SPAN,
     };
-    let t_string = &Type {
+    let t_string = Type {
         inner: InnerType::String,
         span: EMPTY_SPAN,
     };
 
     let mut m = HashMap::new();
     m.insert(
-        "printInt",
+        "printInt".to_string(),
         FunDesc {
-            ret_type: t_void,
-            name: "printInt",
-            args_types: vec![t_int],
+            ret_type: t_void.clone(),
+            name: "printInt".to_string(),
+            args_types: vec![t_int.clone()],
         },
     );
     m.insert(
-        "printString",
+        "printString".to_string(),
         FunDesc {
-            ret_type: t_void,
-            name: "printString",
-            args_types: vec![t_string],
+            ret_type: t_void.clone(),
+            name: "printString".to_string(),
+            args_types: vec![t_string.clone()],
         },
     );
     m.insert(
-        "error",
+        "error".to_string(),
         FunDesc {
             ret_type: t_void,
-            name: "error",
+            name: "error".to_string(),
             args_types: vec![],
         },
     );
     m.insert(
-        "readInt",
+        "readInt".to_string(),
         FunDesc {
             ret_type: t_int,
-            name: "readInt",
+            name: "readInt".to_string(),
             args_types: vec![],
         },
     );
     m.insert(
-        "readString",
+        "readString".to_string(),
         FunDesc {
             ret_type: t_string,
-            name: "readString",
+            name: "readString".to_string(),
             args_types: vec![],
         },
     );

@@ -4,8 +4,8 @@ use model::ast::*;
 use std::collections::HashMap;
 
 pub struct FunctionContext<'a> {
-    class_ctx: Option<&'a ClassDesc<'a>>,
-    global_ctx: &'a GlobalContext<'a>,
+    class_ctx: Option<&'a ClassDesc>,
+    global_ctx: &'a GlobalContext,
 }
 
 enum Env<'a> {
@@ -76,7 +76,7 @@ impl<'a> Env<'a> {
         }
     }
 
-    pub fn get_function(&self, name: &str, span: Span) -> FrontendResult<&'a FunDesc<'a>> {
+    pub fn get_function(&self, name: &str, span: Span) -> FrontendResult<&'a FunDesc> {
         match self {
             Env::Root(ctx) => {
                 let mut err_msg = None;
@@ -113,7 +113,7 @@ impl<'a> Env<'a> {
 }
 
 impl<'a> FunctionContext<'a> {
-    pub fn new(cctx: Option<&'a ClassDesc<'a>>, gctx: &'a GlobalContext<'a>) -> Self {
+    pub fn new(cctx: Option<&'a ClassDesc>, gctx: &'a GlobalContext) -> Self {
         FunctionContext {
             class_ctx: cctx,
             global_ctx: gctx,
@@ -353,6 +353,7 @@ impl<'a> FunctionContext<'a> {
         if let InnerExpr::LitNull(type_info) = &expr.inner {
             type_info.replace(Some(expected_expr_type.clone()));
         }
+        // todo allow for class to be implicitly casted to superclass
         Ok(())
     }
 
@@ -368,7 +369,7 @@ impl<'a> FunctionContext<'a> {
             }])
         };
 
-        let validate_fun_call = |fun_desc: &FunDesc<'a>, args: &Vec<Box<Expr>>| {
+        let validate_fun_call = |fun_desc: &FunDesc, args: &Vec<Box<Expr>>| {
             let mut errors = vec![];
             let expected_args_no = fun_desc.args_types.len();
             let got_args_no = args.len();

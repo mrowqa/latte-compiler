@@ -48,7 +48,7 @@ pub struct Block {
     pub span: Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ItemWithSpan<T> {
     // todo (optional) rename to Node<T>
     pub inner: T,
