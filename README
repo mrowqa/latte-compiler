@@ -153,8 +153,6 @@ Opis kompilacji reszty znajduje sie w `src/main.rs`
 
 
 // todo make frontend able to make changes in AST
-- (will it work with all the borrowing? worst case -> Cell instead of Box)
-- insert casts - 2/5
 - insert "this" to methods envs (generally handle it) - 3/5
 - insert "this" everywhere to vars and methods calls - 4/5 // fix printing LLVM code, etc
 - (optimize if/while true/false) - 1/5
@@ -162,3 +160,4 @@ Opis kompilacji reszty znajduje sie w `src/main.rs`
 - correct README 1/5
 
 Then continue with codegen.
+Note: jest szybciej przy robieniu kopii :o wyeliminowany pointer chasing?

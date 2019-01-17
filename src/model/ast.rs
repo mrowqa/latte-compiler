@@ -107,7 +107,7 @@ pub enum InnerType {
 }
 
 pub type Expr = ItemWithSpan<InnerExpr>;
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InnerExpr {
     LitVar(String),
     LitInt(i32),
@@ -143,13 +143,13 @@ pub enum InnerExpr {
 }
 
 pub type UnaryOp = ItemWithSpan<InnerUnaryOp>;
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InnerUnaryOp {
     IntNeg,
     BoolNeg,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinaryOp {
     And,
     Or,

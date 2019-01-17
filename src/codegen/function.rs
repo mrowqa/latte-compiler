@@ -703,7 +703,22 @@ impl<'a> FunctionCodeGen<'a> {
                 }
             }
             LitNull => (cur_label, ir::Value::LitNullPtr(None)),
-            CastType(_, _) => unimplemented!(),
+            CastType(expr, dst_type) => {
+                let (new_label, expr_val) = self.process_expression(&expr.inner, cur_label);
+                let dst_type = ir::Type::from_ast(dst_type);
+                match expr_val {
+                    ir::Value::LitNullPtr(_) => (new_label, ir::Value::LitNullPtr(Some(dst_type))),
+                    _ => {
+                        let new_reg = self.get_new_reg_num();
+                        self.get_block(new_label).body.push(ir::Operation::CastPtr {
+                            dst: new_reg,
+                            dst_type: dst_type.clone(),
+                            src_value: expr_val,
+                        });
+                        (new_label, ir::Value::Register(new_reg, dst_type))
+                    }
+                }
+            }
             FunCall {
                 function_name,
                 args,

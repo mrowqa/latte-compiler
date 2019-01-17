@@ -351,10 +351,15 @@ impl<'a> FunctionContext<'a> {
         let expr_type = self.check_expression_get_type(expr, cur_env)?;
         self.global_ctx
             .check_types_compatibility(expected_expr_type, &expr_type, expr.span)?;
-        // if let InnerExpr::LitNull(type_info) = &expr.inner {
-        //     type_info.replace(Some(expected_expr_type.clone()));
-        // }
-        // todo introduce cast if needed (nulls and sub/sup class)
+        if *expected_expr_type != expr_type {
+            expr.inner = InnerExpr::CastType(
+                Box::new(ItemWithSpan {
+                    inner: expr.inner.clone(), // clone to satisfy borrow checker
+                    span: expr.span,
+                }),
+                expected_expr_type.clone(),
+            );
+        }
         Ok(())
     }
 
@@ -404,7 +409,7 @@ impl<'a> FunctionContext<'a> {
             LitBool(_) => Ok(Bool),
             LitStr(_) => Ok(String),
             LitNull => Ok(Null),
-            CastType(_, _) => unimplemented!(),
+            CastType(_, _) => unreachable!(), // we add it after processing some node (it is implicit cast)
             FunCall {
                 function_name,
                 ref mut args,
