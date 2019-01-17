@@ -45,22 +45,22 @@ impl<'a> SemanticAnalyzer<'a> {
         let err_msg = "Global analysis succeeded before function body analysis";
         let gctx = self.ctx.as_ref().expect(err_msg);
         let gfun_ctx = FunctionContext::new(None, &gctx);
-        for def in &self.ast.defs {
+        for def in &mut self.ast.defs {
             match def {
-                TopDef::FunDef(fun) => {
+                TopDef::FunDef(ref mut fun) => {
                     gfun_ctx
-                        .analyze_function(&fun)
+                        .analyze_function(fun)
                         .accumulate_errors_in(&mut errors);
                 }
                 TopDef::ClassDef(cl) => {
                     let cl_desc = gctx.get_class_description(&cl.name.inner).expect(err_msg);
                     let cl_ctx = FunctionContext::new(Some(cl_desc), &gctx);
-                    for it in &cl.items {
-                        match &it.inner {
+                    for it in &mut cl.items {
+                        match &mut it.inner {
                             InnerClassItemDef::Field(_, _) => (),
-                            InnerClassItemDef::Method(fun) => {
+                            InnerClassItemDef::Method(ref mut fun) => {
                                 cl_ctx
-                                    .analyze_function(&fun)
+                                    .analyze_function(fun)
                                     .accumulate_errors_in(&mut errors);
                             }
                             InnerClassItemDef::Error => unreachable!(),

@@ -1,4 +1,3 @@
-use std::cell::{Cell, RefCell};
 use std::fmt;
 
 #[derive(Debug)]
@@ -114,7 +113,8 @@ pub enum InnerExpr {
     LitInt(i32),
     LitBool(bool),
     LitStr(String),
-    LitNull(RefCell<Option<InnerType>>),
+    LitNull,
+    CastType(Box<Expr>, InnerType),
     FunCall {
         function_name: Ident,
         args: Vec<Box<Expr>>,
@@ -132,7 +132,7 @@ pub enum InnerExpr {
     NewObject(Type),
     ObjField {
         obj: Box<Expr>,
-        is_obj_an_array: Cell<Option<bool>>,
+        is_obj_an_array: Option<bool>,
         field: Ident,
     },
     ObjMethodCall {

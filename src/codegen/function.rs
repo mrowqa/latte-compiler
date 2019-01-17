@@ -702,10 +702,8 @@ impl<'a> FunctionCodeGen<'a> {
                     (cur_label, casted_val)
                 }
             }
-            LitNull(type_info) => (
-                cur_label,
-                ir::Value::LitNullPtr(type_info.borrow_mut().as_ref().map(ir::Type::from_ast)),
-            ),
+            LitNull => (cur_label, ir::Value::LitNullPtr(None)),
+            CastType(_, _) => unimplemented!(),
             FunCall {
                 function_name,
                 args,
@@ -1011,7 +1009,7 @@ impl<'a> FunctionCodeGen<'a> {
                 is_obj_an_array, ..
             } => {
                 let (new_label, ptr_value) = self.process_lvalue_ref_expression(expr, cur_label);
-                match is_obj_an_array.get() {
+                match is_obj_an_array {
                     Some(true) => {
                         let reg = self.get_new_reg_num();
                         self.get_block(cur_label)
@@ -1058,7 +1056,7 @@ impl<'a> FunctionCodeGen<'a> {
                 ..
             } => {
                 let (new_label, ptr_value) = self.process_expression(&obj.inner, cur_label);
-                match is_obj_an_array.get() {
+                match is_obj_an_array {
                     Some(true) => (
                         new_label,
                         self.generate_calculation_of_ref_to_array_length(new_label, ptr_value),

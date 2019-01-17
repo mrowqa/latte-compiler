@@ -84,7 +84,7 @@ pub enum CmpOp {
 pub enum Value {
     LitInt(i32),
     LitBool(bool),
-    LitNullPtr(Option<Type>),
+    LitNullPtr(Option<Type>), // todo?
     Register(RegNum, Type),
     GlobalRegister(String, Type),
 }
