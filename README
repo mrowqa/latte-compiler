@@ -40,7 +40,7 @@ Podjete decyzje
 (Odnosnie rozszerzen, nie wszystko co jest napisane w readme,
 jest zaimplementowane w backendzie.)
 
-- zmienilem skladnie dla indeksowania tablicy: `arr.[idx]`
+- zmienilem skladnie dla indeksowania tablicy: `arr.[idx]` // todo?
 - nie wspieram rzutowania
 - wystepuja niejawne konwersje: podklasy do nadklasy, oraz nulla do klasy
   lub tablicy,
@@ -105,7 +105,8 @@ void bar() {return foo();}
   tzn. nie mozna miec klasy i globalnej funkcji o tej samej nazwie ani
   pola w klasie i metody o tej samej nazwie,
 - w przypadku dlugiego literalu liczbowego, parser moze sie scrashowac,
-- w metodach, nie ma self, this ani tym podobnych (TODO (ext) rozwazyc zmiane),
+- w metodach jest dostepna zmienna `this` bedaca wskaznikiem na aktualny
+  obiekt,
 - dzielenie przez zero w wyrazeniach stalych jest wykrywane w czasie
   parsowania (mozna dostac syntax error i obok dzielenie przez 0),
 - optymalizacja: inkrementacja i dekrementacja (operatory ++ i --)
@@ -153,11 +154,14 @@ Opis kompilacji reszty znajduje sie w `src/main.rs`
 
 
 // todo make frontend able to make changes in AST
-- insert "this" to methods envs (generally handle it) - 3/5
-- insert "this" everywhere to vars and methods calls - 4/5 // fix printing LLVM code, etc
-- (optimize if/while true/false) - 1/5
-- (rename variables -> get rid of proxy env) 4/5
 - correct README 1/5
+- (rename variables -> get rid of proxy env) 4/5
+- (optimize if/while true/false in frontend, & after ret) - 2/5 (requires full copy because of borrow checker :( ) // cast also; put it in Rc<Cell<_>>?
+
+Done:
+- insert "this" everywhere to vars and methods calls - 4/5 // fix printing LLVM code, etc
+- (insert "this" to methods envs (generally handle it) - 3/5)
+??
 
 Then continue with codegen.
 Note: jest szybciej przy robieniu kopii :o wyeliminowany pointer chasing?

@@ -29,6 +29,13 @@ impl<'a> Env<'a> {
     }
 
     pub fn add_variable(&mut self, var_type: Type, name: Ident) -> FrontendResult<()> {
+        if name.inner == THIS_VAR {
+            return Err(vec![FrontendError {
+                err: "Error: \"this\" variable is reserved for class methods and can't be defined"
+                    .to_string(),
+                span: name.span,
+            }]);
+        }
         match self {
             Env::Root(_) => unreachable!(),
             Env::Nested { ref mut locals, .. } => {
@@ -44,13 +51,17 @@ impl<'a> Env<'a> {
         }
     }
 
-    pub fn get_variable(&self, name: &str, span: Span) -> FrontendResult<InnerType> {
+    // returns type & is member of a class
+    pub fn get_variable(&self, name: &str, span: Span) -> FrontendResult<(InnerType, bool)> {
         match self {
             Env::Root(ctx) => {
                 let mut err_msg = None;
                 if let Some(cctx) = ctx.class_ctx {
+                    if name == THIS_VAR {
+                        return Ok((InnerType::Class(cctx.get_name().to_string()), false));
+                    }
                     match cctx.get_item(ctx.global_ctx, name) {
-                        Some(TypeWrapper::Var(t)) => return Ok(t.inner.clone()),
+                        Some(TypeWrapper::Var(t)) => return Ok((t.inner.clone(), true)),
                         Some(TypeWrapper::Fun(_)) => {
                             err_msg = Some("Error: expected variable, found a class method")
                         }
@@ -70,19 +81,20 @@ impl<'a> Env<'a> {
                 }])
             }
             Env::Nested { locals, parent } => match locals.get(name) {
-                Some(t) => Ok(t.inner.clone()),
+                Some(t) => Ok((t.inner.clone(), false)),
                 None => parent.get_variable(name, span),
             },
         }
     }
 
-    pub fn get_function(&self, name: &str, span: Span) -> FrontendResult<&'a FunDesc> {
+    // returns fun desc & is a class method
+    pub fn get_function(&self, name: &str, span: Span) -> FrontendResult<(&'a FunDesc, bool)> {
         match self {
             Env::Root(ctx) => {
                 let mut err_msg = None;
                 if let Some(cctx) = ctx.class_ctx {
                     match cctx.get_item(ctx.global_ctx, name) {
-                        Some(TypeWrapper::Fun(f)) => return Ok(f),
+                        Some(TypeWrapper::Fun(f)) => return Ok((f, true)),
                         Some(TypeWrapper::Var(_)) => {
                             err_msg = Some("Error: expected function, found a class field")
                         }
@@ -92,7 +104,7 @@ impl<'a> Env<'a> {
                 let err_msg = match err_msg {
                     Some(e) => e,
                     None => match ctx.global_ctx.get_function_description(name) {
-                        Some(f) => return Ok(f),
+                        Some(f) => return Ok((f, false)),
                         None => "Error: function not defined",
                     },
                 };
@@ -354,7 +366,7 @@ impl<'a> FunctionContext<'a> {
         if *expected_expr_type != expr_type {
             expr.inner = InnerExpr::CastType(
                 Box::new(ItemWithSpan {
-                    inner: expr.inner.clone(), // clone to satisfy borrow checker
+                    inner: expr.inner.clone(), // clone to satisfy borrow checker, usually should be small expr, anyway
                     span: expr.span,
                 }),
                 expected_expr_type.clone(),
@@ -399,12 +411,30 @@ impl<'a> FunctionContext<'a> {
             }
         };
 
+        let mut override_expr = None;
         use self::BinaryOp::*;
         use self::InnerExpr::*;
         use self::InnerType::*;
         use self::InnerUnaryOp::*;
-        match &mut expr.inner {
-            LitVar(var) => cur_env.get_variable(&var, expr.span),
+        let result = match &mut expr.inner {
+            LitVar(var) => match cur_env.get_variable(&var, expr.span) {
+                Ok((var_type, true)) => {
+                    override_expr = Some(InnerExpr::ObjField {
+                        obj: Box::new(ItemWithSpan {
+                            span: expr.span,
+                            inner: InnerExpr::LitVar(THIS_VAR.to_string()),
+                        }),
+                        is_obj_an_array: Some(false),
+                        field: ItemWithSpan {
+                            span: expr.span,
+                            inner: var.to_string(),
+                        },
+                    });
+                    Ok(var_type)
+                }
+                Ok((var_type, false)) => Ok(var_type),
+                Err(err) => Err(err),
+            },
             LitInt(_) => Ok(Int),
             LitBool(_) => Ok(Bool),
             LitStr(_) => Ok(String),
@@ -413,11 +443,23 @@ impl<'a> FunctionContext<'a> {
             FunCall {
                 function_name,
                 ref mut args,
-            } => {
-                let fun_desc =
-                    cur_env.get_function(function_name.inner.as_ref(), function_name.span)?;
-                validate_fun_call(&fun_desc, args)
-            }
+            } => match cur_env.get_function(function_name.inner.as_ref(), function_name.span) {
+                Ok((fun_desc, is_class_member)) => {
+                    let result = validate_fun_call(&fun_desc, args);
+                    if is_class_member {
+                        override_expr = Some(InnerExpr::ObjMethodCall {
+                            obj: Box::new(ItemWithSpan {
+                                span: function_name.span,
+                                inner: InnerExpr::LitVar(THIS_VAR.to_string()),
+                            }),
+                            method_name: function_name.clone(),
+                            args: args.to_vec(), // copy to satisfy borrow checker, usually should be small objects
+                        });
+                    }
+                    result
+                }
+                Err(err) => Err(err),
+            },
             BinaryOp(ref mut lhs, op, ref mut rhs) => {
                 let fail_with = |op_str: &str, args: &str| {
                     front_err(format!(
@@ -588,6 +630,10 @@ impl<'a> FunctionContext<'a> {
                 Ok(_) => front_err("Error: only classes have methods".to_string()),
                 Err(err) => Err(err),
             },
+        };
+        if let Some(new_expr) = override_expr {
+            expr.inner = new_expr;
         }
+        result
     }
 }
