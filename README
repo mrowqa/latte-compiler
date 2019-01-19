@@ -37,6 +37,7 @@ Na studentsie niestety nie ma zainstalowanych biblioteki standardowej C
 Podjete decyzje
 ===============
 
+// todo (ext) test on students
 - zmienilem skladnie dla indeksowania tablicy: `arr.[idx]` // todo?
 - nie wspieram jawnego rzutowania
 - wystepuja niejawne konwersje: podklasy do nadklasy (w tym tablicy dowolnie

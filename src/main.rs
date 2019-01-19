@@ -134,8 +134,3 @@ fn run_command(cmd: &[&str]) -> bool {
         Err(_) => false,
     }
 }
-
-// todo (ext) clippy
-// todo (ext) test on students
-// todo (ext) test against official tests
-// todo (ext) test against students' tests

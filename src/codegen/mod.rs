@@ -43,7 +43,7 @@ impl<'a> CodeGen<'a> {
                     }) => {
                         class_hierarchy
                             .entry(parent_name)
-                            .or_insert(vec![])
+                            .or_insert_with(Vec::new)
                             .push(cl);
                     }
                     None => {
