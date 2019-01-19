@@ -160,11 +160,13 @@ Mozliwe usprawnienia
 ====================
 
 Mozliwe usprawnienia po refaktoringu frontendu (moze on modyfikowac AST):
+
 - przenazwanie zmiennych - wtedy nie bedzie potrzebne dodatkowa logika
   w backendzie z proxy env,
 - usuniecie martwego kodu (po returnie, if/while true/false) [1],
 
 Inne mozliwe usprawienia:
+
 - duzo malych kawalkow kodu sie powtarza - mozna przygotowac makra,
 - mozna w specjalny sposob obslugiwac proxy env w backendzie dla SSA:
   patrzec na numer warstwy lub dodatkowy atrybut przy zapisie i w ten sposob
@@ -172,10 +174,10 @@ Inne mozliwe usprawienia:
   czas amortyzowany liniowy zamiast wykladniczego - bedzie obslugiwac tylke
   te zmienne, ktore faktycznie wystapily w srodku bloku),
 - skladnia dla tablic `a[idx]` zamiast `a.[idx]`,
-- [1] mozna sprobowac uzyc Rc<RefCell<_>> zamiast Box<_> - moze to dodac
+- [1] mozna sprobowac uzyc `Rc<RefCell<_>>` zamiast `Box<_>` - moze to dodac
   wiecej wskaznikow posrednich, ale w momencie modyfikowania drzewa AST
   nie bedzie potrzebne kopiowanie calego podwyrazenia, zeby tylko zadowolic
   borrow checkera (komponent w kompilatorze Rusta),
-  Note: podczas robienia refaktoringu, robie kopie obiektow w wielu miejscach,
+  _Note: podczas robienia refaktoringu, robie kopie obiektow w wielu miejscach,
         gdzie wczesniej byly referencje - i jest szybciej. Byc moze poprzez
-        wyeliminowanie pointer chasingu.
+        wyeliminowanie pointer chasingu._
