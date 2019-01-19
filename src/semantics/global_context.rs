@@ -205,20 +205,37 @@ impl GlobalContext {
     ) -> FrontendResult<()> {
         use self::InnerType::{Array, Class, Null};
         match (lhs, rhs) {
-            _ if lhs == rhs => Ok(()),
             (Array(_), Null) | (Class(_), Null) => Ok(()),
-            (Class(superclass), Class(subclass)) => {
-                if self.check_if_subclass(superclass, subclass) {
-                    Ok(())
-                } else {
-                    let err = format!("Error: expected type {0}, got type {1} (note: {1} is not a subclass of {0})", lhs, rhs);
-                    Err(vec![FrontendError { err, span }])
+            _ => {
+                match self.check_arrays_types_compatibility(lhs, rhs) {
+                    (true, _) => Ok(()),
+                    (false, Some((superclass, subclass))) => {
+                        let err = format!("Error: expected type {}, got type {} (note: {} is not a subclass of {})", lhs, rhs, subclass, superclass);
+                        Err(vec![FrontendError { err, span }])
+                    }
+                    (false, None) => {
+                        let err = format!("Error: expected type {}, got type {}", lhs, rhs);
+                        Err(vec![FrontendError { err, span }])
+                    }
                 }
             }
-            _ => {
-                let err = format!("Error: expected type {}, got type {}", lhs, rhs);
-                Err(vec![FrontendError { err, span }])
-            }
+        }
+    }
+
+    fn check_arrays_types_compatibility<'a>(
+        &self,
+        lhs: &'a InnerType,
+        rhs: &'a InnerType,
+    ) -> (bool, Option<(&'a str, &'a str)>) {
+        use self::InnerType::{Array, Class};
+        match (lhs, rhs) {
+            (Array(lhs2), Array(rhs2)) => self.check_arrays_types_compatibility(lhs2, rhs2),
+            (Array(_), _) | (_, Array(_)) => (false, None),
+            (Class(superclass), Class(subclass)) => (
+                self.check_if_subclass(superclass, subclass),
+                Some((superclass, subclass)),
+            ),
+            _ => (lhs == rhs, None),
         }
     }
 

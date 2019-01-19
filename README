@@ -5,7 +5,7 @@ Students, Srodowisko
 ```
 $ rustc --version
 ```
-Lokalnie pracuje z najnowsza wersja (1.31.1). Zalecana jest aktualizacja
+Lokalnie pracuje z dosc nowa wersja (1.31.1). Zalecana jest aktualizacja
 kompilatora (nie trwa to dlugo), poniewaz moj kod miejscami korzysta
 z niedawnych zmian w kompilatorze Rusta.
 
@@ -37,13 +37,11 @@ Na studentsie niestety nie ma zainstalowanych biblioteki standardowej C
 Podjete decyzje
 ===============
 
-(Odnosnie rozszerzen, nie wszystko co jest napisane w readme,
-jest zaimplementowane w backendzie.)
-
 - zmienilem skladnie dla indeksowania tablicy: `arr.[idx]` // todo?
-- nie wspieram rzutowania
-- wystepuja niejawne konwersje: podklasy do nadklasy, oraz nulla do klasy
-  lub tablicy,
+- nie wspieram jawnego rzutowania
+- wystepuja niejawne konwersje: podklasy do nadklasy (w tym tablicy dowolnie
+  wymiarowej podklasy do tablicy o tym samym wymiarze nadklasy), oraz nulla
+  do klasy lub tablicy,
 - `for(int x : arr) {...}` jest rownoznaczny (semantycznie):
 ```
 int i = 0;
@@ -54,6 +52,7 @@ while (i < arr.length) {
   {...}
 }
 ```
+w tym mozna napisac: `for(SubClass[] it : superclass_array_2d)`
 - optymalizacja: petla foreach pod spodem jest jednakze zoptymalizowana
   i odpowiada takiemu kodu w C:
 ```
@@ -105,12 +104,12 @@ void bar() {return foo();}
   tzn. nie mozna miec klasy i globalnej funkcji o tej samej nazwie ani
   pola w klasie i metody o tej samej nazwie,
 - w przypadku dlugiego literalu liczbowego, parser moze sie scrashowac,
-- w metodach jest dostepna zmienna `this` bedaca wskaznikiem na aktualny
+- w metodach jest dostepna zmienna `self` bedaca wskaznikiem na aktualny
   obiekt,
 - dzielenie przez zero w wyrazeniach stalych jest wykrywane w czasie
   parsowania (mozna dostac syntax error i obok dzielenie przez 0),
 - optymalizacja: inkrementacja i dekrementacja (operatory ++ i --)
-  np. `a.[4]++` tylko raz obliczy adres elementu `a.[4]`,
+  np. `x.foo().a.[4]++` tylko raz obliczy adres elementu `x.foo().a.[4]`,
 - optymalizacja: dla tablic wykonuje tylko jedna alokacje; pole length
   znajduje sie w pamieci tuz przed elementami tablicy,
 - generowany kod jest w postaci SSA: wszystkie zmienne lokalne
@@ -121,7 +120,8 @@ void bar() {return foo();}
   zmiennych lokalnych (chce uniknac (1) dodatkowej globalnej analizy,
   jakie zmienne wystepuja, bo to czasochlonne dla programisty,
   i (2) przechodzenie przez cialo bloku dwukrotnie, bo gdy takie bloki
-  zagniezdzimy to mamy algorytm wykladniczy),
+  zagniezdzimy to mamy algorytm wykladniczy; robienie pelnej kopii zmiennych
+  lokalnych takze jest wykladnicze, ale cos trzeba bylo wybrac), // todo kopia niepotrzebna! (mozna obslugiwac w magiczny sposob proxy enva)
 - optymalizacja: jesli da sie tego uniknac, nie generuje kodu dla ! (negacji
   logicznej), tzn. w przypadku, gdy wynik decyduje gdzie skoczyc, a nie jest
   zapisywany na zmienna,
@@ -135,6 +135,9 @@ void bar() {return foo();}
   wskaznik rowniez do nich zaliczam) - zakladam domyslny data layout dla
   64-bitowej architektury; dla alokacji obiektow, korzystam
   z "getelementptr null, 1",
+- po refaktoryzacji: frontend dodaje odpowiednie niejawne rzutowania typow,
+- po refaktoryzacji: frontend dodaje niejawne "this." tam, gdzie w srodku
+  metod odwolujemy sie do skladowych klasy,
 
 
 Drobne uwagi
@@ -153,15 +156,10 @@ Opis kompilacji runtime'u znajduje sie w `compile-runtime.sh`
 Opis kompilacji reszty znajduje sie w `src/main.rs`
 
 
+-------------------------------------------------------------------------
 // todo make frontend able to make changes in AST
-- correct README 1/5
 - (rename variables -> get rid of proxy env) 4/5
 - (optimize if/while true/false in frontend, & after ret) - 2/5 (requires full copy because of borrow checker :( ) // cast also; put it in Rc<Cell<_>>?
-
-Done:
-- insert "this" everywhere to vars and methods calls - 4/5 // fix printing LLVM code, etc
-- (insert "this" to methods envs (generally handle it) - 3/5)
-??
-
-Then continue with codegen.
+- refactor: use macros for similar pieces of code
+- use Rc<RefCell<_>> instead of Box<_>
 Note: jest szybciej przy robieniu kopii :o wyeliminowany pointer chasing?

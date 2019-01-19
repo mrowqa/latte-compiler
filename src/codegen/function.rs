@@ -16,17 +16,6 @@ struct EnvFrame<'a> {
     locals: HashMap<&'a str, ir::Value>,
 }
 
-enum ValueWrapper<'a> {
-    GlobalOrLocalValue(&'a ir::Value),
-    #[allow(dead_code)] // todo remove
-    ClassValue(()), // todo
-}
-
-struct FunctionInfoWrapper {
-    ret_type: ir::Type,
-    is_class_method: bool,
-}
-
 const ARGS_LABEL: ir::Label = ir::Label(std::u32::MAX);
 const UNREACHABLE_LABEL: ir::Label = ir::Label(std::u32::MAX - 1);
 
@@ -101,10 +90,7 @@ impl<'a> Env<'a> {
         let names = self.get_all_visible_local_variables(frame_label);
         let proxy_frame_label = self.insert_empty_proxy_frame(frame_label);
         for n in names {
-            let value = match self.get_variable(frame_label, n) {
-                ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
-                ValueWrapper::ClassValue(_) => unreachable!(),
-            };
+            let value = self.get_variable(frame_label, n).clone();
             self.frames
                 .get_mut(&proxy_frame_label)
                 .unwrap()
@@ -134,10 +120,7 @@ impl<'a> Env<'a> {
     pub fn apply_proxy_env(&mut self, proxy: ir::Label, target: ir::Label) {
         let names = self.get_all_visible_local_variables(proxy);
         for n in names {
-            let value = match self.get_variable(proxy, n) {
-                ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
-                ValueWrapper::ClassValue(_) => unreachable!(),
-            };
+            let value = self.get_variable(proxy, n).clone();
             self.frames
                 .get_mut(&target)
                 .unwrap()
@@ -146,42 +129,23 @@ impl<'a> Env<'a> {
         }
     }
 
-    pub fn get_variable(&self, frame: ir::Label, name: &'a str) -> ValueWrapper {
+    pub fn get_variable(&self, frame: ir::Label, name: &'a str) -> &ir::Value {
         let mut it = Some(frame);
 
         while let Some(frame_no) = it {
             let frame = &self.frames[&frame_no];
             match frame.locals.get(name) {
-                Some(v) => return ValueWrapper::GlobalOrLocalValue(v),
+                Some(v) => return v,
                 None => it = frame.parent,
             }
         }
 
-        // todo get class var
-        unimplemented!()
-        // if let Some(cctx) = ctx.class_ctx {
-        //     match cctx.get_item(ctx.global_ctx, name) {
-        //         Some(TypeWrapper::Var(t)) => return Ok(t.inner.clone()),
-        //         _ => unreachable!(),
-        //     }
-        // }
+        unreachable!()
     }
 
-    pub fn get_function(&self, name: &str) -> FunctionInfoWrapper {
-        if let Some(_cctx) = self.class_ctx {
-            // todo class method
-            unimplemented!()
-            // match cctx.get_item(ctx.global_ctx, name) {
-            //     Some(TypeWrapper::Fun(f)) => return Ok(f),
-            //     _ => // ask global ctx
-            // }
-        }
-
+    pub fn get_function_type(&self, name: &str) -> ir::Type {
         let desc = self.global_ctx.get_function_description(name).unwrap();
-        FunctionInfoWrapper {
-            ret_type: ir::Type::from_ast(&desc.ret_type.inner),
-            is_class_method: false,
-        }
+        ir::Type::from_function_desc(&desc)
     }
 
     fn get_all_visible_local_variables(&self, frame: ir::Label) -> HashSet<&'a str> {
@@ -200,7 +164,6 @@ impl<'a> Env<'a> {
 
 pub struct FunctionCodeGen<'a> {
     global_strings: &'a mut HashMap<String, ir::GlobalStrNum>,
-    #[allow(dead_code)] // todo remove
     class_registry: &'a ClassRegistry<'a>,
     env: Env<'a>,
     blocks: Vec<ir::Block>,
@@ -241,7 +204,7 @@ impl<'a> FunctionCodeGen<'a> {
                 add_to_args(
                     &mut self,
                     ir::Type::from_class_name(cctx.get_name()),
-                    ".this", // todo correct frontend to work with "this" variable
+                    ast::THIS_VAR,
                 );
             } else {
                 fun_name = fun_def.name.inner.to_string();
@@ -330,12 +293,13 @@ impl<'a> FunctionCodeGen<'a> {
                 Assign(lhs, rhs) => {
                     let (new_label, rhs_value) = self.process_expression(&rhs.inner, cur_label);
                     cur_label = new_label;
+                    use model::ast::InnerExpr::*;
                     match &lhs.inner {
-                        ast::InnerExpr::LitVar(var_name) => {
+                        LitVar(var_name) => {
                             self.env
                                 .update_existing_local_variable(cur_label, &var_name, rhs_value);
                         }
-                        _ => {
+                        ArrayElem { .. } | ObjField { .. } => {
                             let (new_label, ref_val) =
                                 self.process_lvalue_ref_expression(&lhs.inner, cur_label);
                             cur_label = new_label;
@@ -343,6 +307,7 @@ impl<'a> FunctionCodeGen<'a> {
                                 .body
                                 .push(ir::Operation::Store(rhs_value, ref_val));
                         }
+                        _ => unreachable!(),
                     };
                 }
                 Incr(lhs) | Decr(lhs) => {
@@ -351,13 +316,11 @@ impl<'a> FunctionCodeGen<'a> {
                         Decr(_) => ir::ArithOp::Sub,
                         _ => unreachable!(),
                     };
+                    use model::ast::InnerExpr::*;
                     match &lhs.inner {
-                        ast::InnerExpr::LitVar(var_name) => {
+                        LitVar(var_name) => {
                             let new_reg = self.get_new_reg_num();
-                            let val_l = match self.env.get_variable(cur_label, var_name) {
-                                ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
-                                ValueWrapper::ClassValue(_) => unimplemented!(), // todo
-                            };
+                            let val_l = self.env.get_variable(cur_label, var_name).clone();
                             let val_r = ir::Value::LitInt(1);
                             self.get_block(cur_label)
                                 .body
@@ -366,7 +329,7 @@ impl<'a> FunctionCodeGen<'a> {
                             self.env
                                 .update_existing_local_variable(cur_label, &var_name, val_res);
                         }
-                        _ => {
+                        ArrayElem { .. } | ObjField { .. } => {
                             let (new_label, ref_val) =
                                 self.process_lvalue_ref_expression(&lhs.inner, cur_label);
                             cur_label = new_label;
@@ -383,6 +346,7 @@ impl<'a> FunctionCodeGen<'a> {
                             let changed_value = ir::Value::Register(changed_reg, ir::Type::Int);
                             body.push(ir::Operation::Store(changed_value, ref_val));
                         }
+                        _ => unreachable!(),
                     };
                 }
                 Ret(opt_expr) => {
@@ -668,14 +632,53 @@ impl<'a> FunctionCodeGen<'a> {
         expr: &ast::InnerExpr,
         cur_label: ir::Label,
     ) -> (ir::Label, ir::Value) {
+        let process_fun_call = |self_: &mut Self,
+                                function_value: ir::Value,
+                                this_ptr: Option<ir::Value>,
+                                args: &Vec<Box<ast::Expr>>,
+                                cur_label: ir::Label| {
+            let fun_ret_type = match &function_value {
+                ir::Value::Register(_, ir::Type::Ptr(t))
+                | ir::Value::GlobalRegister(_, ir::Type::Ptr(t)) => match &**t {
+                    ir::Type::Func(t, _) => (**t).clone(),
+                    _ => unreachable!(),
+                },
+                _ => unreachable!(),
+            };
+            let mut args_values = vec![];
+            args_values.extend(this_ptr);
+
+            let mut cur_label = cur_label;
+            for a in args {
+                let (new_label, value) = self_.process_expression(&a.inner, cur_label);
+                cur_label = new_label;
+                args_values.push(value);
+            }
+
+            let reg_num = self_.get_new_reg_num();
+            let op_reg_num = match fun_ret_type {
+                ir::Type::Void => None,
+                _ => Some(reg_num),
+            };
+
+            self_
+                .get_block(cur_label)
+                .body
+                .push(ir::Operation::FunctionCall(
+                    op_reg_num,
+                    fun_ret_type.clone(),
+                    function_value,
+                    args_values,
+                ));
+            (cur_label, ir::Value::Register(reg_num, fun_ret_type))
+        };
+
         use model::ast::{BinaryOp::*, InnerExpr::*, InnerUnaryOp::*};
         match expr {
-            LitVar(var_name) => {
-                match self.env.get_variable(cur_label, var_name) {
-                    ValueWrapper::GlobalOrLocalValue(value) => (cur_label, value.clone()),
-                    ValueWrapper::ClassValue(_) => unimplemented!(), // todo
-                }
-            }
+            LitVar(var_name) => (
+                cur_label,
+                self.env.get_variable(cur_label, var_name).clone(),
+            ),
             LitInt(int_val) => (cur_label, ir::Value::LitInt(*int_val)),
             LitBool(bool_val) => (cur_label, ir::Value::LitBool(*bool_val)),
             LitStr(str_val) => {
@@ -723,36 +726,10 @@ impl<'a> FunctionCodeGen<'a> {
                 function_name,
                 args,
             } => {
-                let info = self.env.get_function(function_name.inner.as_ref());
-                let mut args_values = vec![];
-                if info.is_class_method {
-                    // todo add "this" ptr to args
-                    unimplemented!()
-                }
-
-                let mut cur_label = cur_label;
-                for a in args {
-                    let (new_label, value) = self.process_expression(&a.inner, cur_label);
-                    cur_label = new_label;
-                    // todo handle nulls + subclasses (implicit casts)
-                    args_values.push(value);
-                }
-
-                let reg_num = self.get_new_reg_num();
-                let op_reg_num = match info.ret_type {
-                    ir::Type::Void => None,
-                    _ => Some(reg_num),
-                };
-
-                self.get_block(cur_label)
-                    .body
-                    .push(ir::Operation::FunctionCall(
-                        op_reg_num,
-                        info.ret_type.clone(),
-                        function_name.inner.clone(),
-                        args_values,
-                    ));
-                (cur_label, ir::Value::Register(reg_num, info.ret_type))
+                let fun_type = self.env.get_function_type(function_name.inner.as_ref());
+                let function_value =
+                    ir::Value::GlobalRegister(function_name.inner.clone(), fun_type);
+                process_fun_call(self, function_value, None, args, cur_label)
             }
             BinaryOp(lhs, op, rhs) => match op {
                 And | Or => {
@@ -794,12 +771,19 @@ impl<'a> FunctionCodeGen<'a> {
                         }
                         str_type @ ir::Type::Ptr(_) => {
                             let new_reg = self.get_new_reg_num();
+                            let fun_type = ir::Type::Ptr(Box::new(ir::Type::Func(
+                                Box::new(str_type.clone()),
+                                vec![str_type.clone(), str_type.clone()],
+                            )));
                             self.get_block(new_label)
                                 .body
                                 .push(ir::Operation::FunctionCall(
                                     Some(new_reg),
                                     str_type.clone(),
-                                    "_bltn_string_concat".to_string(),
+                                    ir::Value::GlobalRegister(
+                                        "_bltn_string_concat".to_string(),
+                                        fun_type,
+                                    ),
                                     vec![lhs_val, rhs_val],
                                 ));
                             (new_label, ir::Value::Register(new_reg, str_type))
@@ -835,12 +819,17 @@ impl<'a> FunctionCodeGen<'a> {
                                     _ => unreachable!(),
                                 };
                                 let new_reg = self.get_new_reg_num();
+                                let str_type = ir::Type::Ptr(Box::new(ir::Type::Char));
+                                let fun_type = ir::Type::Ptr(Box::new(ir::Type::Func(
+                                    Box::new(ir::Type::Bool),
+                                    vec![str_type.clone(), str_type],
+                                )));
                                 self.get_block(cur_label)
                                     .body
                                     .push(ir::Operation::FunctionCall(
                                         Some(new_reg),
                                         ir::Type::Bool,
-                                        fun_name.to_string(),
+                                        ir::Value::GlobalRegister(fun_name.to_string(), fun_type),
                                         vec![lhs_val, rhs_val],
                                     ));
                                 (cur_label, ir::Value::Register(new_reg, ir::Type::Bool))
@@ -906,11 +895,16 @@ impl<'a> FunctionCodeGen<'a> {
                 let reg_num = self.get_new_reg_num();
                 let casted_reg_num = self.get_new_reg_num();
                 let array_type_ir = ir::Type::Ptr(Box::new(elem_type_ir));
+                let void_ptr_type = ir::Type::Ptr(Box::new(ir::Type::Char));
+                let malloc_type = ir::Type::Ptr(Box::new(ir::Type::Func(
+                    Box::new(void_ptr_type.clone()),
+                    vec![ir::Type::Int, ir::Type::Int],
+                )));
                 let body = &mut self.get_block(new_label).body;
                 body.push(ir::Operation::FunctionCall(
                     Some(reg_num),
-                    ir::Type::Ptr(Box::new(ir::Type::Char)),
-                    "_bltn_alloc_array".to_string(),
+                    void_ptr_type,
+                    ir::Value::GlobalRegister("_bltn_alloc_array".to_string(), malloc_type),
                     vec![elem_cnt_value, ir::Value::LitInt(elem_size)],
                 ));
                 let void_ptr_type = ir::Type::Ptr(Box::new(ir::Type::Char));
@@ -924,20 +918,6 @@ impl<'a> FunctionCodeGen<'a> {
                     new_label,
                     ir::Value::Register(casted_reg_num, array_type_ir),
                 )
-            }
-            ArrayElem { .. } => {
-                // todo refactor; is it same as ObjField?
-                let (new_label, elem_ref_value) =
-                    self.process_lvalue_ref_expression(expr, cur_label);
-                let new_reg = self.get_new_reg_num();
-                let elem_type = match &elem_ref_value {
-                    ir::Value::Register(_, ir::Type::Ptr(subtype)) => (**subtype).clone(),
-                    _ => unreachable!(),
-                };
-                self.get_block(new_label)
-                    .body
-                    .push(ir::Operation::Load(new_reg, elem_ref_value));
-                (new_label, ir::Value::Register(new_reg, elem_type))
             }
             NewObject(class_type) => {
                 // "it's an optimization - inlined constructor"
@@ -975,12 +955,16 @@ impl<'a> FunctionCodeGen<'a> {
                         let allocd_cl_ptr_val =
                             ir::Value::Register(allocd_cl_ptr_reg, class_type_ptr.clone());
                         let void_ptr_type = ir::Type::Ptr(Box::new(ir::Type::Char));
+                        let malloc_type = ir::Type::Ptr(Box::new(ir::Type::Func(
+                            Box::new(void_ptr_type.clone()),
+                            vec![ir::Type::Int],
+                        )));
                         self.get_block(cur_label)
                             .body
                             .push(ir::Operation::FunctionCall(
                                 Some(allocd_void_ptr_reg),
                                 void_ptr_type.clone(),
-                                "_bltn_malloc".to_string(),
+                                ir::Value::GlobalRegister("_bltn_malloc".to_string(), malloc_type),
                                 vec![ir::Value::Register(size_int_reg, ir::Type::Int)],
                             ));
                         self.get_block(cur_label).body.push(ir::Operation::CastPtr {
@@ -1020,23 +1004,117 @@ impl<'a> FunctionCodeGen<'a> {
                     _ => unreachable!(),
                 }
             }
-            ObjField {
-                is_obj_an_array, ..
-            } => {
-                let (new_label, ptr_value) = self.process_lvalue_ref_expression(expr, cur_label);
-                match is_obj_an_array {
-                    Some(true) => {
-                        let reg = self.get_new_reg_num();
-                        self.get_block(cur_label)
-                            .body
-                            .push(ir::Operation::Load(reg, ptr_value));
-                        (new_label, ir::Value::Register(reg, ir::Type::Int))
-                    }
-                    Some(false) => unimplemented!(), // todo
-                    None => unreachable!(),
-                }
+            ArrayElem { .. } | ObjField { .. } => {
+                let (new_label, elem_ref_value) =
+                    self.process_lvalue_ref_expression(expr, cur_label);
+                let new_reg = self.get_new_reg_num();
+                let elem_type = match &elem_ref_value {
+                    ir::Value::Register(_, ir::Type::Ptr(subtype)) => (**subtype).clone(),
+                    _ => unreachable!(),
+                };
+                self.get_block(new_label)
+                    .body
+                    .push(ir::Operation::Load(new_reg, elem_ref_value));
+                (new_label, ir::Value::Register(new_reg, elem_type))
             }
-            ObjMethodCall { .. } => unimplemented!(), // todo
+            ObjMethodCall {
+                obj,
+                method_name,
+                args,
+            } => {
+                let (new_label, this_value) = self.process_expression(&obj.inner, cur_label);
+
+                // load vtable
+                let this_type = match &this_value {
+                    ir::Value::Register(_, t) => (*t).clone(),
+                    _ => unreachable!(),
+                };
+                let elem_this_type = match &this_type {
+                    ir::Type::Ptr(t) => (**t).clone(),
+                    _ => unreachable!(),
+                };
+                let class_name = match &this_type {
+                    ir::Type::Ptr(t) => match &**t {
+                        ir::Type::Class(name) => name.to_string(),
+                        _ => unreachable!(),
+                    },
+                    _ => unreachable!(),
+                };
+                let vtable_type = ir::get_class_vtable_type(&class_name);
+                let vtable_reg = self.get_new_reg_num();
+                let vtable_val = ir::Value::Register(vtable_reg, vtable_type.clone());
+                let vtable_ptr_reg = self.get_new_reg_num();
+                let vtable_ptr_type = ir::Type::Ptr(Box::new(vtable_type.clone()));
+                let vtable_ptr_val = ir::Value::Register(vtable_ptr_reg, vtable_ptr_type);
+                self.get_block(new_label)
+                    .body
+                    .push(ir::Operation::GetElementPtr(
+                        vtable_ptr_reg,
+                        elem_this_type,
+                        vec![
+                            this_value.clone(),
+                            ir::Value::LitInt(0),
+                            ir::Value::LitInt(0),
+                        ],
+                    ));
+                self.get_block(new_label)
+                    .body
+                    .push(ir::Operation::Load(vtable_reg, vtable_ptr_val));
+
+                // load the method from vtable
+                let vtable_elem_type = match &vtable_type {
+                    ir::Type::Ptr(t) => (**t).clone(),
+                    _ => unreachable!(),
+                };
+                let class_desc = self.class_registry.get_class_description(&class_name);
+                let (method_number, method_type) =
+                    class_desc.get_method_number_and_type(&method_name.inner);
+                let method_ptr_type = ir::Type::Ptr(Box::new(method_type.clone()));
+                let method_ptr_reg = self.get_new_reg_num();
+                let method_reg = self.get_new_reg_num();
+                let method_ptr_val = ir::Value::Register(method_ptr_reg, method_ptr_type.clone());
+                let method_val = ir::Value::Register(method_reg, method_type.clone());
+                self.get_block(new_label)
+                    .body
+                    .push(ir::Operation::GetElementPtr(
+                        method_ptr_reg,
+                        vtable_elem_type,
+                        vec![
+                            vtable_val,
+                            ir::Value::LitInt(0),
+                            ir::Value::LitInt(method_number as i32),
+                        ],
+                    ));
+                self.get_block(new_label)
+                    .body
+                    .push(ir::Operation::Load(method_reg, method_ptr_val));
+
+                // cast this if needed
+                let casted_this_value;
+                match &method_type {
+                    ir::Type::Ptr(t) => match &**t {
+                        ir::Type::Func(_, args_types) => {
+                            if args_types[0] != this_type {
+                                let casted_reg = self.get_new_reg_num();
+                                self.get_block(new_label).body.push(ir::Operation::CastPtr {
+                                    dst: casted_reg,
+                                    dst_type: args_types[0].clone(),
+                                    src_value: this_value,
+                                });
+                                casted_this_value =
+                                    ir::Value::Register(casted_reg, args_types[0].clone())
+                            } else {
+                                casted_this_value = this_value;
+                            }
+                        }
+                        _ => unimplemented!(),
+                    },
+                    _ => unreachable!(),
+                };
+
+                // do the call
+                process_fun_call(self, method_val, Some(casted_this_value), args, cur_label)
+            }
         }
     }
 
@@ -1068,17 +1146,43 @@ impl<'a> FunctionCodeGen<'a> {
             ObjField {
                 obj,
                 is_obj_an_array,
-                ..
+                field,
             } => {
-                let (new_label, ptr_value) = self.process_expression(&obj.inner, cur_label);
-                match is_obj_an_array {
-                    Some(true) => (
-                        new_label,
-                        self.generate_calculation_of_ref_to_array_length(new_label, ptr_value),
-                    ),
-                    Some(false) => unimplemented!(), // todo
+                let (new_label, obj_ptr_value) = self.process_expression(&obj.inner, cur_label);
+                let field_ptr_val = match is_obj_an_array {
+                    Some(true) => {
+                        self.generate_calculation_of_ref_to_array_length(new_label, obj_ptr_value)
+                    }
+                    Some(false) => {
+                        let field_ptr_reg = self.get_new_reg_num();
+                        let class_type = match &obj_ptr_value {
+                            ir::Value::Register(_, ir::Type::Ptr(t)) => (**t).clone(),
+                            _ => unreachable!(),
+                        };
+                        let class_desc = match &class_type {
+                            ir::Type::Class(name) => {
+                                self.class_registry.get_class_description(name)
+                            }
+                            _ => unreachable!(),
+                        };
+                        let (field_number, field_type) =
+                            class_desc.get_field_number_and_type(&field.inner);
+                        self.get_block(new_label)
+                            .body
+                            .push(ir::Operation::GetElementPtr(
+                                field_ptr_reg,
+                                class_type,
+                                vec![
+                                    obj_ptr_value,
+                                    ir::Value::LitInt(0),
+                                    ir::Value::LitInt(field_number as i32),
+                                ],
+                            ));
+                        ir::Value::Register(field_ptr_reg, ir::Type::Ptr(Box::new(field_type)))
+                    }
                     None => unreachable!(),
-                }
+                };
+                (new_label, field_ptr_val)
             }
             _ => unreachable!(), // we don't use store for local variables
         }
@@ -1134,18 +1238,9 @@ impl<'a> FunctionCodeGen<'a> {
         let names = self.env.get_all_visible_local_variables(common_pred);
 
         for name in names {
-            let value0 = match self.env.get_variable(common_pred, name) {
-                ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
-                ValueWrapper::ClassValue(_) => unreachable!(),
-            };
-            let value1 = match self.env.get_variable(br1_proxy, name) {
-                ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
-                ValueWrapper::ClassValue(_) => unreachable!(),
-            };
-            let value2 = match self.env.get_variable(br2_proxy, name) {
-                ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
-                ValueWrapper::ClassValue(_) => unreachable!(),
-            };
+            let value0 = self.env.get_variable(common_pred, name).clone();
+            let value1 = self.env.get_variable(br1_proxy, name).clone();
+            let value2 = self.env.get_variable(br2_proxy, name).clone();
 
             if value0 != value1 || value0 != value2 {
                 let new_value = if value1 == value2 {
@@ -1176,10 +1271,7 @@ impl<'a> FunctionCodeGen<'a> {
         let mut stub_info = vec![];
 
         for name in names {
-            let value = match self.env.get_variable(pred_label, name) {
-                ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
-                ValueWrapper::ClassValue(_) => unreachable!(),
-            };
+            let value = self.env.get_variable(pred_label, name).clone();
             let reg_num = self.get_new_reg_num();
             let phi_value = ir::Value::Register(reg_num, value.get_type());
             stub_info.push((name, value, phi_value.clone()));
@@ -1219,10 +1311,7 @@ impl<'a> FunctionCodeGen<'a> {
                 // end_body_label, so we will not confuse new variables
                 // defined in body loop which shadows original ones
                 let proxy_label = proxy_label.unwrap();
-                let value2 = match self.env.get_variable(proxy_label, name) {
-                    ValueWrapper::GlobalOrLocalValue(v) => v.clone(),
-                    ValueWrapper::ClassValue(_) => unreachable!(),
-                };
+                let value2 = self.env.get_variable(proxy_label, name).clone();
                 phi_vec.push((value2, end_body_label));
             }
             let (reg_num, reg_type) = match phi_value {

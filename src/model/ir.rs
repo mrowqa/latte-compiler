@@ -1,4 +1,5 @@
 use model::ast;
+use semantics::global_context::FunDesc;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -24,7 +25,7 @@ pub struct Function {
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Label(pub u32);
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct RegNum(pub u32);
 
 // consider replacing it with just a String
@@ -43,7 +44,7 @@ pub type PhiEntry = (RegNum, Type, Vec<(Value, Label)>); // todo (optional) add 
 // read left-to-right, like in LLVM
 pub enum Operation {
     Return(Option<Value>),
-    FunctionCall(Option<RegNum>, Type, String, Vec<Value>),
+    FunctionCall(Option<RegNum>, Type, Value, Vec<Value>),
     Arithmetic(RegNum, ArithOp, Value, Value),
     Compare(RegNum, CmpOp, Value, Value),
     GetElementPtr(RegNum, Type, Vec<Value>),
@@ -80,7 +81,7 @@ pub enum CmpOp {
     NE,
 }
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Value {
     LitInt(i32),
     LitBool(bool),
@@ -89,7 +90,7 @@ pub enum Value {
     GlobalRegister(String, Type),
 }
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Type {
     Void,
     Int,
@@ -131,6 +132,17 @@ impl Type {
             vec![Type::from_class_name(class_name)]
                 .into_iter()
                 .chain(fun_def.args.iter().map(|(t, _)| Type::from_ast(&t.inner)))
+                .collect(),
+        )))
+    }
+
+    pub fn from_function_desc(fun_desc: &FunDesc) -> Type {
+        Type::Ptr(Box::new(Type::Func(
+            Box::new(Type::from_ast(&fun_desc.ret_type.inner)),
+            fun_desc
+                .args_types
+                .iter()
+                .map(|t| Type::from_ast(&t.inner))
                 .collect(),
         )))
     }
@@ -286,7 +298,7 @@ impl fmt::Display for Operation {
                     None => (),
                 }
 
-                write!(f, "call {} @{}(", ret_type, fun_name)?;
+                write!(f, "call {} {}(", ret_type, fun_name)?;
                 for (i, val) in args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;

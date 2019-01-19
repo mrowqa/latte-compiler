@@ -86,6 +86,10 @@ impl<'a> ClassRegistry<'a> {
             program.classes.push(cl.get_class_ir())
         }
     }
+
+    pub fn get_class_description(&self, name: &str) -> &ClassDescription<'a> {
+        &self.classes[name]
+    }
 }
 
 impl<'a> ClassDescription<'a> {
@@ -115,5 +119,15 @@ impl<'a> ClassDescription<'a> {
 
     fn get_class_ir(self) -> ir::Class {
         self.class
+    }
+
+    pub fn get_field_number_and_type(&self, field: &str) -> (usize, ir::Type) {
+        let no = self.fields[field];
+        (no, self.class.fields[no].clone())
+    }
+
+    pub fn get_method_number_and_type(&self, method: &str) -> (usize, ir::Type) {
+        let no = self.methods[method];
+        (no, self.class.vtable[no].0.clone())
     }
 }
