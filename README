@@ -121,7 +121,7 @@ void bar() {return foo();}
   jakie zmienne wystepuja, bo to czasochlonne dla programisty,
   i (2) przechodzenie przez cialo bloku dwukrotnie, bo gdy takie bloki
   zagniezdzimy to mamy algorytm wykladniczy; robienie pelnej kopii zmiennych
-  lokalnych takze jest wykladnicze, ale cos trzeba bylo wybrac), // todo kopia niepotrzebna! (mozna obslugiwac w magiczny sposob proxy enva)
+  lokalnych takze jest wykladnicze, ale cos trzeba bylo wybrac),
 - optymalizacja: jesli da sie tego uniknac, nie generuje kodu dla ! (negacji
   logicznej), tzn. w przypadku, gdy wynik decyduje gdzie skoczyc, a nie jest
   zapisywany na zmienna,
@@ -156,10 +156,25 @@ Opis kompilacji runtime'u znajduje sie w `compile-runtime.sh`
 Opis kompilacji reszty znajduje sie w `src/main.rs`
 
 
--------------------------------------------------------------------------
-// todo make frontend able to make changes in AST
-- (rename variables -> get rid of proxy env) 4/5
-- (optimize if/while true/false in frontend, & after ret) - 2/5 (requires full copy because of borrow checker :( ) // cast also; put it in Rc<Cell<_>>?
-- refactor: use macros for similar pieces of code
-- use Rc<RefCell<_>> instead of Box<_>
-Note: jest szybciej przy robieniu kopii :o wyeliminowany pointer chasing?
+Mozliwe usprawnienia
+====================
+
+Mozliwe usprawnienia po refaktoringu frontendu (moze on modyfikowac AST):
+- przenazwanie zmiennych - wtedy nie bedzie potrzebne dodatkowa logika
+  w backendzie z proxy env,
+- usuniecie martwego kodu (po returnie, if/while true/false) [1],
+
+Inne mozliwe usprawienia:
+- duzo malych kawalkow kodu sie powtarza - mozna przygotowac makra,
+- mozna w specjalny sposob obslugiwac proxy env w backendzie dla SSA:
+  patrzec na numer warstwy lub dodatkowy atrybut przy zapisie i w ten sposob
+  wyeliminowac zbedna pelna kopie wszystkich zmiennych lokalnych (bedzie miec
+  czas amortyzowany liniowy zamiast wykladniczego - bedzie obslugiwac tylke
+  te zmienne, ktore faktycznie wystapily w srodku bloku),
+- [1] mozna sprobowac uzyc Rc<RefCell<_>> zamiast Box<_> - moze to dodac
+  wiecej wskaznikow posrednich, ale w momencie modyfikowania drzewa AST
+  nie bedzie potrzebne kopiowanie calego podwyrazenia, zeby tylko zadowolic
+  borrow checkera (komponent w kompilatorze Rusta),
+  Note: podczas robienia refaktoringu, robie kopie obiektow w wielu miejscach,
+        gdzie wczesniej byly referencje - i jest szybciej. Byc moze poprzez
+        wyeliminowanie pointer chasingu.
