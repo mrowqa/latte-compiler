@@ -37,8 +37,7 @@ Na studentsie niestety nie ma zainstalowanych biblioteki standardowej C
 Podjete decyzje
 ===============
 
-// todo (ext) test on students
-- zmienilem skladnie dla indeksowania tablicy: `arr.[idx]` // todo?
+- zmienilem skladnie dla indeksowania tablicy: `arr.[idx]`
 - nie wspieram jawnego rzutowania
 - wystepuja niejawne konwersje: podklasy do nadklasy (w tym tablicy dowolnie
   wymiarowej podklasy do tablicy o tym samym wymiarze nadklasy), oraz nulla
@@ -172,6 +171,7 @@ Inne mozliwe usprawienia:
   wyeliminowac zbedna pelna kopie wszystkich zmiennych lokalnych (bedzie miec
   czas amortyzowany liniowy zamiast wykladniczego - bedzie obslugiwac tylke
   te zmienne, ktore faktycznie wystapily w srodku bloku),
+- skladnia dla tablic `a[idx]` zamiast `a.[idx]`,
 - [1] mozna sprobowac uzyc Rc<RefCell<_>> zamiast Box<_> - moze to dodac
   wiecej wskaznikow posrednich, ale w momencie modyfikowania drzewa AST
   nie bedzie potrzebne kopiowanie calego podwyrazenia, zeby tylko zadowolic
