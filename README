@@ -135,6 +135,7 @@ void bar() {return foo();}
   wskaznik rowniez do nich zaliczam) - zakladam domyslny data layout dla
   64-bitowej architektury; dla alokacji obiektow, korzystam
   z "getelementptr null, 1",
+- zaimplementowalem metody wirtualne,
 - po refaktoryzacji: frontend dodaje odpowiednie niejawne rzutowania typow,
 - po refaktoryzacji: frontend dodaje niejawne "this." tam, gdzie w srodku
   metod odwolujemy sie do skladowych klasy,
@@ -171,7 +172,7 @@ Inne mozliwe usprawienia:
 - mozna w specjalny sposob obslugiwac proxy env w backendzie dla SSA:
   patrzec na numer warstwy lub dodatkowy atrybut przy zapisie i w ten sposob
   wyeliminowac zbedna pelna kopie wszystkich zmiennych lokalnych (bedzie miec
-  czas amortyzowany liniowy zamiast wykladniczego - bedzie obslugiwac tylke
+  czas amortyzowany liniowy zamiast wykladniczego - bedzie obslugiwac tylko
   te zmienne, ktore faktycznie wystapily w srodku bloku),
 - skladnia dla tablic `a[idx]` zamiast `a.[idx]`,
 - [1] mozna sprobowac uzyc `Rc<RefCell<_>>` zamiast `Box<_>` - moze to dodac
